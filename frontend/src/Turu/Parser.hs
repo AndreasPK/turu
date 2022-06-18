@@ -48,9 +48,16 @@ name = [lowerCaseUnicode][alphaNumericUnicode]*
 unit = "unit" <name>\n
        binds
 
-binds = comment
-      | emptyLine
-      | bind
+defs = bind
+     | famDef
+
+famDef = "fam" fam_name "=" consDefs
+
+consDefs
+    = con
+    | con "|" consDef
+
+con = upperCaseName fam_name
 
 -- args are sugar for lambdas on rhs
 bind = <name> arg_list '=' expr
@@ -140,7 +147,7 @@ runParser input parser =
 -- Actual parsers
 
 keywords :: [Text]
-keywords = ["match", "in", "let"]
+keywords = ["match", "in", "let", "fam", "Any"]
 
 lineComment :: P ()
 lineComment = L.skipLineComment "--"
@@ -198,6 +205,20 @@ pright = void $ L.symbol space ")"
 
 aright :: P ()
 aright = void $ sym "->"
+
+famDef :: P (FamDef Text)
+famDef = do
+    key "fam"
+    fam_name <- conName
+    sym "="
+    con_defs <- sepBy consDef (sym "|")
+    return $ FamDef fam_name con_defs
+
+consDef :: P (ConDef Text)
+consDef = do
+    con_name <- conName
+    con_args <- many conName
+    return $ ConDef con_name con_args
 
 bind :: P (Bind Text)
 bind = do

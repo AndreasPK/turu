@@ -78,6 +78,12 @@ data Literal
     | LitChar Char
     deriving (Show, Eq)
 
+data FamDef identifier = FamDef identifier [ConDef identifier]
+    deriving (Eq, Show)
+
+data ConDef identifier = ConDef identifier [identifier]
+    deriving (Eq, Show)
+
 data Bind identifier = Bind identifier (Expr identifier)
     deriving (Show, Eq)
 
