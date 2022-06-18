@@ -3,14 +3,14 @@ module Turu.Builtins where
 import Turu.AST
 
 -- Executing a builtin is a transformation of the input state into some output state
-type RunBuiltIn state = state -> Expr -> (state, Expr)
+type RunBuiltIn state = state -> Expr Var -> (state, Expr Var)
 
 builtinUnit :: UnitName
 builtinUnit = UnitName "Builtin"
 
 putChar :: IdInfo
 putChar =
-    Info
+    VarInfo
         { info_unique = 1
         , info_name = "putChar"
         , info_impl = Nothing
@@ -19,7 +19,7 @@ putChar =
 
 putStr :: IdInfo
 putStr =
-    Info
+    VarInfo
         { info_unique = 2
         , info_name = "putStr"
         , info_impl = Nothing
@@ -28,7 +28,7 @@ putStr =
 
 putInt :: IdInfo
 putInt =
-    Info
+    VarInfo
         { info_unique = 3
         , info_name = "putInt"
         , info_impl = Nothing
@@ -37,7 +37,7 @@ putInt =
 
 getInt :: IdInfo
 getInt =
-    Info
+    VarInfo
         { info_unique = 4
         , info_name = "getInt"
         , info_impl = Nothing

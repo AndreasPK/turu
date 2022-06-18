@@ -7,5 +7,5 @@ module Turu.Prelude (
 
 import Data.Foldable
 import Data.Maybe
-import Data.Text (Text)
+import Data.Text (Text, pack, unpack)
 import Prelude

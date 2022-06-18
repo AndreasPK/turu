@@ -9,7 +9,7 @@ import Turu.Builtins
 import Turu.Eval.State
 
 -- Function and arguments must already be evaluated
-tryBuiltin :: WithHeap m => Expr -> [Expr] -> m (Expr)
+tryBuiltin :: WithHeap m => Expr Var -> [Expr Var] -> m (Expr Var)
 tryBuiltin (Var fun) args
     | v_unit fun == builtinUnit =
         -- TODO hash the function name/make it a constructor/a different IdInfo?
@@ -20,6 +20,6 @@ tryBuiltin (Var fun) args
                 | [Var arg] <- args ->
                     error "TODO"
                 | [Lit lit] <- args ->
-                    trace ("putInt " ++ show lit) $ return (Lit LitUnit)
+                    trace ("putInt " ++ show lit) $ return (Lit $ LitInt 42)
             "getInt" -> return $ mkIntE 42
 tryBuiltin fun args = error $ "Invalid builtin application" ++ show fun ++ " " ++ show args

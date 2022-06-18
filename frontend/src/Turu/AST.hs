@@ -35,44 +35,52 @@ data DataCon = DataCon
     deriving (Show)
 
 -- | Information about an id shared by all occurences, stored in the symbol table.
-data IdInfo = Info
-    { info_unique :: VUnique
-    -- ^ key for this id
-    , info_name :: Text
-    -- ^ Human name for id
-    , info_impl :: Maybe Expr
-    -- ^ The rhs if applicable
-    , info_unit :: UnitName
-    -- ^ Defining unit
-    }
+data IdInfo
+    = VarInfo
+        { info_unique :: VUnique
+        -- ^ key for this id
+        , info_name :: Text
+        -- ^ Human name for id
+        , info_impl :: Maybe (Expr Var)
+        -- ^ The rhs if applicable
+        , info_unit :: UnitName
+        -- ^ Defining unit
+        }
+    | ConInfo
+        { info_unique :: VUnique
+        -- ^ key for this id
+        , info_name :: Text
+        -- ^ Human name for id
+        , info_con :: DataCon
+        }
     deriving (Show)
 
-data Expr
+-- | Initially a identifier can just be a string
+data Expr identifier
     = Lit Literal
-    | App Expr [Expr]
-    | Var Var
-    | Lam Var Expr
-    | Con DataCon
-    | Case {e_scrut :: Expr, e_alts :: [Alt]}
-    deriving (Show)
+    | App (Expr identifier) [Expr identifier]
+    | Var identifier
+    | Lam identifier (Expr identifier)
+    | Let (Bind identifier) (Expr identifier)
+    | Match {e_scrut :: identifier, e_alts :: [Alt identifier]}
+    deriving (Show, Eq)
 
-data Alt
-    = LitAlt Literal Expr
-    | ConAlt DataCon [Var] Expr
-    | AnyAlt Expr -- `seq`
-    deriving (Show)
+data Alt identifier
+    = LitAlt Literal (Expr identifier)
+    | ConAlt identifier [identifier] (Expr identifier)
+    | WildAlt (Expr identifier) -- `seq`
+    deriving (Show, Eq)
 
 data Literal
     = LString Text
     | LitInt Int
     | LitChar Char
-    | LitUnit
-    deriving (Show)
+    deriving (Show, Eq)
 
-data Bind = Bind Var Expr
-    deriving (Show)
+data Bind identifier = Bind identifier (Expr identifier)
+    deriving (Show, Eq)
 
 -- | A unit of compilation is identified by it's **name**
 newtype UnitName = UnitName {un_name :: Text} deriving (Eq, Hashable, Show)
 
-data CompilationUnit = Unit {unit_name :: Text, unit_binds :: [Bind]}
+data CompilationUnit identifier = Unit {unit_name :: Text, unit_binds :: [Bind identifier]}

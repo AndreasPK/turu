@@ -17,7 +17,8 @@ import qualified Data.Map.Strict as M
 
 -}
 
-data Heap = Heap (IM.IntMap Expr)
+type EvalExpr = Var
+data Heap = Heap (IM.IntMap EvalExpr)
 
 newtype Ptr = Ptr Int deriving (Eq, Ord)
 
@@ -25,7 +26,7 @@ newtype Ptr = Ptr Int deriving (Eq, Ord)
 -- Should be fine for a strict lang?
 type Closure = Expr
 
-allocateClosure :: Heap -> Expr -> (Heap, Ptr)
+allocateClosure :: Heap -> EvalExpr -> (Heap, Ptr)
 allocateClosure (Heap m) expr =
     let max_ptr
             | IM.null m = 0
@@ -33,7 +34,7 @@ allocateClosure (Heap m) expr =
         new_ptr = max_ptr + 1
      in (Heap $! IM.insert new_ptr expr m, Ptr new_ptr)
 
-getClosure :: Heap -> Ptr -> Expr
+getClosure :: Heap -> Ptr -> EvalExpr
 getClosure (Heap m) (Ptr p) =
     fromMaybe (error "Invalid ptr - urkh") (IM.lookup p m)
 
@@ -42,8 +43,8 @@ mkHeap = Heap mempty
 newtype HeapM a = HeapM (State Heap a) deriving (Functor, Applicative, Monad)
 
 class Monad m => WithHeap m where
-    alloc :: Expr -> m Ptr
-    deref :: Ptr -> m Expr
+    alloc :: EvalExpr -> m Ptr
+    deref :: Ptr -> m EvalExpr
 
 instance WithHeap (HeapM) where
     alloc expr = HeapM $ do
