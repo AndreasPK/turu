@@ -15,24 +15,22 @@ type Unique (domain :: Symbol) = Int
 type VUnique = Unique "Var"
 type CUnique = Unique "Con"
 
+data VarType
+    = ConFam
+    | Id
+
+type Name = Text
+type Tag = Int
+
 data Var
     = -- TODO: GHC has a notion of "internal/local" variables. That might be useful in the future.
 
       -- | something from another unit
-      External
+      MkVar
       { v_unique :: VUnique
       , v_unit :: UnitName
       , v_info :: IdInfo
       }
-    deriving (Show)
-
-data DataCon = DataCon
-    { c_unique :: CUnique
-    , c_tag :: Int
-    -- ^ 1 based, because why not
-    , c_name :: Text
-    , c_fields :: [Text]
-    }
     deriving (Show)
 
 -- | Information about an id shared by all occurences, stored in the symbol table.
@@ -40,19 +38,38 @@ data IdInfo
     = VarInfo
         { info_unique :: VUnique
         -- ^ key for this id
-        , info_name :: Text
+        , info_name :: Name
         -- ^ Human name for id
         , info_impl :: Maybe (Expr Var)
         -- ^ The rhs if applicable
         , info_unit :: UnitName
         -- ^ Defining unit
         }
-    | ConInfo
+    | -- | Also covers fams
+      FamConInfo
         { info_unique :: VUnique
         -- ^ key for this id
-        , info_name :: Text
+        , info_name :: Name
         -- ^ Human name for id
         , info_con :: DataCon
+        }
+    deriving (Show)
+
+data DataCon
+    = DataCon
+        { c_unique :: CUnique
+        , c_tag :: Tag
+        -- ^ 1 based, because why not
+        , c_name :: Name
+        , c_fields :: ~[FamDef Var]
+        }
+    | FamCon
+        { c_unique :: CUnique
+        , c_tag :: Tag
+        -- ^ 1 based, because why not
+        , c_name :: Name
+        , c_fields :: ~[FamDef Var]
+        -- ^ Always empty I guess
         }
     deriving (Show)
 
@@ -78,10 +95,10 @@ data Literal
     | LitChar Char
     deriving (Show, Eq)
 
-data FamDef identifier = FamDef identifier [ConDef identifier]
+data FamDef identifier = FamDef {fd_var :: ~identifier, fd_cons :: ~[ConDef identifier]}
     deriving (Eq, Show)
 
-data ConDef identifier = ConDef identifier [identifier]
+data ConDef identifier = ConDef {cd_var :: ~identifier, cd_tag :: Tag, cd_args :: ~[identifier]}
     deriving (Eq, Show)
 
 data Bind identifier = Bind identifier (Expr identifier)

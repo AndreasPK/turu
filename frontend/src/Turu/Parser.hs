@@ -26,7 +26,7 @@ We want to rely on parantheses quite a lot for a start. A fully formed unit woul
 
 unit Fib -- This is a comment - unit <Name> starts a new compilation unit.
 
-fib n = case n of
+fib n = match n of
         [   0 -> (0)
         ,   1 -> (1)
         ,   _ -> (+) (fib (n-1)) (fib (n-2))
@@ -79,7 +79,6 @@ expr1 = lit
 lit = "text"
     | number  -- only ints perhaps for now?
     | 'c' -- char for some c
-    | '()' -- unit
 
 var = <name>
 
@@ -211,14 +210,21 @@ famDef = do
     key "fam"
     fam_name <- conName
     sym "="
-    con_defs <- sepBy consDef (sym "|")
+    con_defs <- consList 0
     return $ FamDef fam_name con_defs
 
-consDef :: P (ConDef Text)
-consDef = do
+-- True | False | Either
+consList :: Int -> P [ConDef Text]
+consList tag = do
+    con1 <- consDef tag
+    cons <- try (sym "|" *> (consList (tag + 1) <|> pure []))
+    return $ con1 : cons
+
+consDef :: Int -> P (ConDef Text)
+consDef tag = do
     con_name <- conName
     con_args <- many conName
-    return $ ConDef con_name con_args
+    return $ ConDef con_name tag con_args
 
 bind :: P (Bind Text)
 bind = do

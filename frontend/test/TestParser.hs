@@ -68,9 +68,9 @@ unitTests =
             let result = Unit "myUnit" [Bind "f" $ Lam "x" "x"]
              in runParser "unit myUnit \nf x = x" P.unit @?= Just result
         , testCase "conDef" $
-            let result = FamDef "Bool" [ConDef "True" [], ConDef "False" []]
+            let result = FamDef "Bool" [ConDef "True" 0 [], ConDef "False" 1 []]
              in runParser "fam Bool = True | False" P.famDef @?= Just result
         , testCase "conDef - maybe" $
-            let result = FamDef "Maybe" [ConDef "Just" ["Any"], ConDef "Nothing" []]
+            let result = FamDef "Maybe" [ConDef "Just" 0 ["Any"], ConDef "Nothing" 1 []]
              in runParser "fam Maybe = Just Any | Nothing" P.famDef @?= Just result
         ]
