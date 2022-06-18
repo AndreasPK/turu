@@ -1,3 +1,5 @@
+{-# LANGUAGE RecursiveDo #-}
+
 module Turu.AST.Rename where
 
 import Turu.Prelude as P
@@ -10,6 +12,11 @@ import Data.HashMap.Strict as HM
 import Data.Text as T
 
 type RnM a = State RnState a
+
+runRn :: RnM a -> a
+runRn act = fst $ runState act (initRnState)
+
+initRnState = RnState 0 mempty mempty mempty
 
 data RnState = RnState
     { r_unique :: Int
@@ -82,21 +89,51 @@ getVar name = do
 
 --------- Actual rename stuff --------
 
+type FamName = Name
+
 renameUnit :: CompilationUnit Text -> RnM (CompilationUnit Var)
 renameUnit (Unit name binders) = Unit name <$> mapM rnBinder binders
 
 rnFamDef :: FamDef Name -> RnM (FamDef Var)
-rnFamDef (FamDef fam_name fam_cons) = do
+rnFamDef (FamDef fam_name fam_cons) = mdo
     fam_var <- mkFamVar fam_name fam_cons
-    let fam_def = FamDef fam_name
-    undefined
 
-rnConDef :: Name -> ConDef Name -> RnM (ConDef Var)
-rnConDef fam_name def@(ConDef con_name tag cd_args) = do
-    con_args <- mapM getFam cd_args -- Trouble?
+    (~con_defs :: [ConDef Var]) <- mapM (rnConDef fam_def fam_name) fam_cons
+    fam_def <- return $ FamDef fam_var con_defs :: RnM (FamDef Var)
+    return $ fam_def
+  where
+
+-- -- FOR CONSTRUCTORS JOSE
+-- doOneCon :: ConDef Text -> RnM [FamDef Var]
+-- doOneCon (ConDef _name _tag arg_names) = mdo
+--     (names, args) <- unzip <$> mkConArgs $ P.zip arg_names $ args
+--     return $ fmap fst args
+
+-- mkConArgs :: [(FamName, (FamDef Var, ()))] -> RnM [(FamDef Var, ())]
+-- mkConArgs = mapM mkConArg
+
+-- mkConArg (arg_fam_name, (future_def, _))
+--     | arg_fam_name == fam_name =
+--         return (future_def, ())
+--     | otherwise = do
+--         def <- getFam arg_fam_name
+--         return (def, ())
+
+-- mkFamDef :: FamDef Var -> (FamDef Var, FamDef Var)
+-- mkFamDef = undefined
+
+-- List = Cons Any List | Nil
+
+rnConDef :: FamDef Var -> Name -> ConDef Name -> RnM (ConDef Var)
+rnConDef this_fam_def fam_name def@(ConDef con_name tag cd_args) = do
+    (con_args :: [FamDef Var]) <- mapM getFam' cd_args -- Trouble?
     con_var <- mkConVar fam_name def
-    let rn_def = ConDef con_var tag con_args
-    undefined
+    let rn_def = ConDef (cd_var con_var) tag (P.map fd_var con_args) :: ConDef Var
+    return rn_def
+  where
+    getFam' arg_fam
+        | fam_name == arg_fam = pure this_fam_def
+        | otherwise = getFam arg_fam
 
 -- fam Maybe = Just Any | Nothing
 mkFamVar :: Name -> [ConDef Name] -> RnM Var

@@ -216,8 +216,8 @@ famDef = do
 -- True | False | Either
 consList :: Int -> P [ConDef Text]
 consList tag = do
-    con1 <- consDef tag
-    cons <- try (sym "|" *> (consList (tag + 1) <|> pure []))
+    con1 <- try $ consDef tag
+    cons <- try ((sym "|" *> (consList (tag + 1)) <|> pure []))
     return $ con1 : cons
 
 consDef :: Int -> P (ConDef Text)

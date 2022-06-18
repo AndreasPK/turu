@@ -58,6 +58,7 @@ executable frontend
         StrictData,
         GeneralizedNewtypeDeriving,
         TypeApplications
+        ScopedTypeVariables
 
 executable test-parser
     default-language: Haskell2010
