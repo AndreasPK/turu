@@ -27,6 +27,7 @@ executable frontend
     other-modules:
         Turu.AST
         Turu.AST.Utils
+        Turu.AST.Rename
         Turu.Prelude
         Turu.SymTab
         Turu.Eval

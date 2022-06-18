@@ -61,4 +61,10 @@ unitTests =
         , testCase "let2" $
             let result = Let (Bind "f" (Lam "y" $ Lam "x" "x")) (App "f" ["y"]) :: Expr Text
              in runParser "let f y x = x in (f y)" P.expr @?= Just result
+        , testCase "unit1" $
+            let result = Unit "myUnit" []
+             in runParser "unit myUnit \n" P.unit @?= Just result
+        , testCase "unit2" $
+            let result = Unit "myUnit" [Bind "f" $ Lam "x" "x"]
+             in runParser "unit myUnit \nf x = x" P.unit @?= Just result
         ]

@@ -7,6 +7,7 @@ module Turu.AST where
 import Turu.Prelude
 
 import Data.Hashable
+import Data.String
 import Data.Text
 import GHC.TypeLits
 
@@ -81,6 +82,7 @@ data Bind identifier = Bind identifier (Expr identifier)
     deriving (Show, Eq)
 
 -- | A unit of compilation is identified by it's **name**
-newtype UnitName = UnitName {un_name :: Text} deriving (Eq, Hashable, Show)
+newtype UnitName = UnitName {un_name :: Text} deriving (Eq, Hashable, Show, IsString)
 
-data CompilationUnit identifier = Unit {unit_name :: Text, unit_binds :: [Bind identifier]}
+data CompilationUnit identifier = Unit {unit_name :: UnitName, unit_binds :: [Bind identifier]}
+    deriving (Eq, Show)

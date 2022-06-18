@@ -178,6 +178,15 @@ unitDef =
     UnitName <$> do
         lex (tokens (==) "unit") *> lex name
 
+binds :: P [Bind Text]
+binds = many bind
+
+unit :: P (CompilationUnit Text)
+unit = do
+    n <- unitDef
+    bs <- binds
+    return $ Unit n bs
+
 number :: P Int
 number = lex $ L.signed mempty L.decimal
 
