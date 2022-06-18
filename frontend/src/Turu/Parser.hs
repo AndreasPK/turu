@@ -12,15 +12,16 @@ We want to rely on parantheses quite a lot for a start. A fully formed unit woul
 unit Fib -- This is a comment - unit <Name> starts a new compilation unit.
 
 fib n = case n of
-        [   0 -> 0
-        ,   1 -> 1
-        ,   _ -> + (fib (n-1)) (fib (n-2))
+        [   0 -> (0)
+        ,   1 -> (1)
+        ,   _ -> (+) (fib (n-1)) (fib (n-2))
         ]
 
     )
 
--- For now do the lispy (?) thing of no infix expressions.
--- This is a rough sketch for the grammar than
+-- For now do the lispy (?) thing of no infix expressions and parens around all expressions.
+-- But we probably want to allow non-parens expressions where possible to keep ourselves sane.
+-- This is a rough sketch for the grammar with parens everywhere:
 
 unit = "unit" <name>\n
        binds
@@ -39,8 +40,13 @@ expr1 = lit
       | app
       | <name> -- var
       | lam
-      | conName
+      | conName list_of_exprs
+      | let
       | case
+      | expr
+      -- ^ is this ambigous? If we have `f ((` I guess it needs a lot of backtracking to differentiate between
+      `(x)` and `((x) (y)). That is because only when we get to y's  opening parens we know for sure if we have
+          expr instead of app. Might still worth having.
 
 lit = "text"
     | number  -- only ints perhaps for now?
@@ -52,6 +58,8 @@ app = <list_of_exprs> -- at least two!!
 lam = '\' arg_list '->' expr
 
 conName = CapitalLetter:letters (or keyword + lowercase?)
+
+let = 'let' name 'in' expr
 
 case = 'case' expr 'of' '(' alts ')'
 
