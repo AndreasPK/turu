@@ -24,14 +24,19 @@ extra-source-files: CHANGELOG.md
 executable frontend
     main-is:          Main.hs
 
+    ghc-options: -Wall -Wno-unused-imports
+
     other-modules:
         Turu.AST
         Turu.AST.Utils
+        Turu.AST.Name
         Turu.AST.Rename
         Turu.Prelude
         Turu.SymTab
         Turu.Eval
+        Turu.Eval.Reduce
         Turu.Parser
+        Turu.Pretty
         Turu.Builtins
         Turu.Eval.State
         Turu.Eval.Builtins
@@ -50,6 +55,9 @@ executable frontend
        ,unordered-containers
        ,hashable
        ,transformers
+       ,mtl
+       ,pretty
+       ,pretty-show
     hs-source-dirs: src
     default-language: Haskell2010
     default-extensions:
@@ -58,7 +66,8 @@ executable frontend
         StrictData,
         GeneralizedNewtypeDeriving,
         TypeApplications
-        ScopedTypeVariables
+        ScopedTypeVariables,
+        NamedFieldPuns
 
 executable test-parser
     default-language: Haskell2010
@@ -70,15 +79,21 @@ executable test-parser
         OverloadedStrings,
         StrictData,
         GeneralizedNewtypeDeriving,
-        TypeApplications
+        TypeApplications,
+        NamedFieldPuns,
+        ScopedTypeVariables
+
 
     other-modules:
         Turu.AST
+        Turu.AST.Name
         Turu.AST.Utils
         Turu.Prelude
         Turu.SymTab
         Turu.Eval
+        Turu.Eval.Reduce
         Turu.Parser
+        Turu.Pretty
         Turu.Builtins
         Turu.Eval.State
         Turu.Eval.Builtins
@@ -94,3 +109,6 @@ executable test-parser
        ,transformers
        ,tasty
        ,tasty-hunit
+       ,pretty
+       ,pretty-show
+       ,mtl

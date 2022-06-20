@@ -38,6 +38,7 @@ getClosure :: Heap -> Ptr -> EvalExpr
 getClosure (Heap m) (Ptr p) =
     fromMaybe (error "Invalid ptr - urkh") (IM.lookup p m)
 
+mkHeap :: Heap
 mkHeap = Heap mempty
 
 newtype HeapM a = HeapM (State Heap a) deriving (Functor, Applicative, Monad)

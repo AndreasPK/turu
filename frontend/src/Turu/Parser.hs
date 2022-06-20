@@ -5,16 +5,20 @@ module Turu.Parser where
 import Turu.Prelude as P hiding (lex, takeWhile)
 
 import Turu.AST
+import Turu.AST.Name
 import Turu.AST.Utils
 
 import qualified Control.Applicative.Combinators as C
 import Control.Monad
+import qualified Control.Monad.State.Strict as MTLS
 import Control.Monad.Trans.State.Strict (runState)
 import qualified Control.Monad.Trans.State.Strict as ST
 import Data.Char (isAlphaNum)
+import Data.Either (partitionEithers)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as S
 import Data.Text as T
+import qualified Data.Text.IO as T
 import Debug.Trace
 import Text.Megaparsec as M hiding (match)
 import Text.Megaparsec.Char as M hiding (space)
@@ -86,9 +90,9 @@ app = <list_of_exprs> -- at least two!!
 
 lam = '\' arg_list '->' expr
 
-con = conName list_of_exprs
+con = conNameP list_of_exprs
 
-conName = CapitalLetter:letters (or keyword + lowercase?)
+conNameP = CapitalLetter:letters (or keyword + lowercase?)
 
 let = 'let' var 'in' expr
 
@@ -107,12 +111,13 @@ alt = lit '->' expr
 -}
 
 data ParseInfo = ParseInfo
-    { pi_unit :: ~UnitName
+    { pi_unit :: (Maybe UnitName)
     , pi_binds :: ~[Bind Text]
     , pi_uniq :: Int
     }
 
-initParseInfo = ParseInfo (UnitName "NoUnitName") [] 0
+initParseInfo :: ParseInfo
+initParseInfo = ParseInfo (Nothing) [] 0
 
 data ErrorInfo = ErrorInfo
     deriving (Eq, Ord, Show) -- For now :(
@@ -122,6 +127,16 @@ instance ShowErrorComponent ErrorInfo where
     errorComponentLen (ErrorInfo) = 0
 
 type TParseMonad = ST.State ParseInfo
+
+getUnit :: P (Maybe UnitName)
+getUnit = do
+    s <- MTLS.get
+    return $ pi_unit s
+
+setUnit :: Maybe UnitName -> P ()
+setUnit unit1 = do
+    s <- MTLS.get
+    MTLS.put $ s{pi_unit = unit1}
 
 type P a = ParsecT ErrorInfo Text TParseMonad a
 type PState = M.State Text ErrorInfo
@@ -134,14 +149,21 @@ initParseState input =
 runParserStateM :: Text -> P a -> TParseMonad (PState, Either (ParseErrorBundle Text ErrorInfo) a)
 runParserStateM input parser =
     let pstate = initParseState input :: PState
-     in runParserT' parser (initParseState input)
+     in runParserT' parser pstate
 
 runParser :: Text -> P a -> Maybe a
 runParser input parser =
-    let (parse_result, state') = runState (runParserStateM input parser) initParseInfo
+    let (parse_result, _state') = runState (runParserStateM input parser) initParseInfo
         (parse_state, parsed_val) = parse_result
         remainder = stateInput parse_state
-     in traceShow remainder $ either (error . show) Just parsed_val
+     in if T.null remainder
+            then either (error . show) Just parsed_val
+            else traceShow remainder $ either (error . show) Just parsed_val
+
+parseFile :: FilePath -> IO (Maybe (CompilationUnit Name))
+parseFile file = do
+    contents <- T.readFile file
+    return $ Turu.Parser.runParser contents unit
 
 -- Actual parsers
 
@@ -169,29 +191,37 @@ sym = L.symbol space
 key :: Text -> P ()
 key word = (string word *> notFollowedBy alphaNumChar) <* space
 
-name :: P Text
-name = do
+nameText :: P Text
+nameText = do
     c <- lowerChar
     r <- many alphaNumChar :: P String
     space
     let n = pack (c : r)
     if n `P.elem` keywords
         then M.failure (Just $ Tokens $ NE.fromList $ T.unpack n) (S.singleton $ Label $ NE.fromList "identifier")
-        else return $ n
+        else return n
+
+name :: P Name
+name = Name <$> nameText <*> getUnit
 
 unitDef :: P UnitName
-unitDef =
-    UnitName <$> do
-        lex (tokens (==) "unit") *> lex name
+unitDef = do
+    unit_str <- lex (tokens (==) "unit") *> lex nameText
+    let unit_name = UnitName unit_str
+    setUnit $ Just unit_name
+    return unit_name
 
-binds :: P [Bind Text]
-binds = many bind
+defs :: P [Either (Bind Name) (FamDef Name)]
+defs = many def
 
-unit :: P (CompilationUnit Text)
+def :: P (Either (Bind Name) (FamDef Name))
+def = (Right <$> try famDef) <|> (Left <$> try bind)
+
+unit :: P (CompilationUnit Name)
 unit = do
     n <- unitDef
-    bs <- binds
-    return $ Unit n bs
+    (bs, fams) <- partitionEithers <$> defs
+    return $ Unit n bs fams
 
 number :: P Int
 number = lex $ L.signed mempty L.decimal
@@ -199,34 +229,34 @@ number = lex $ L.signed mempty L.decimal
 pleft :: P ()
 pleft = void $ L.symbol space "("
 
-pright :: ParsecT ErrorInfo Text TParseMonad ()
+pright :: P ()
 pright = void $ L.symbol space ")"
 
 aright :: P ()
 aright = void $ sym "->"
 
-famDef :: P (FamDef Text)
+famDef :: P (FamDef Name)
 famDef = do
     key "fam"
-    fam_name <- conName
-    sym "="
+    fam_name <- conNameP
+    _ <- sym "="
     con_defs <- consList 0
     return $ FamDef fam_name con_defs
 
 -- True | False | Either
-consList :: Int -> P [ConDef Text]
+consList :: Int -> P [ConDef Name]
 consList tag = do
     con1 <- try $ consDef tag
-    cons <- try ((sym "|" *> (consList (tag + 1)) <|> pure []))
-    return $ con1 : cons
+    constrs <- try ((sym "|" *> (consList (tag + 1)) <|> pure []))
+    return $ con1 : constrs
 
-consDef :: Int -> P (ConDef Text)
+consDef :: Int -> P (ConDef Name)
 consDef tag = do
-    con_name <- conName
-    con_args <- many conName
+    con_name <- conNameP
+    con_args <- many conNameP
     return $ ConDef con_name tag con_args
 
-bind :: P (Bind Text)
+bind :: P (Bind Name)
 bind = do
     n <- name
     args <- many name
@@ -234,11 +264,11 @@ bind = do
     e <- expr
     return $ Bind n (mkLams args e)
 
-type ExprP = P (Expr Text)
+type ExprP = P (Expr Name)
 
 -- expression without parens
 expr :: ExprP
-expr = try (pleft *> expr1 <* pright) <|> try var <|> lit <|> try letp <|> try match
+expr = try (pleft *> expr1 <* pright) <|> try var <|> try con <|> try lit <|> try letp <|> try match
 
 -- ( expr )
 expr1 :: ExprP
@@ -262,24 +292,27 @@ letp = do
     key "let"
     n <- name
     args <- many name
-    sym "="
+    _ <- sym "="
     rhs <- expr
     key "in"
     body <- expr
     return $ Let (Bind n $ mkLams args rhs) body
 
-conName :: P Text
-conName = do
+conNameP :: P Name
+conNameP = do
     c <- upperChar
     cs <- lex $ takeWhileP Nothing (isAlphaNum)
     let conName = c `cons` cs
-    return $! conName
+    Name conName <$> (getUnit)
 
 lam :: ExprP
-lam = Lam <$> (sym "\"" *> name) <*> (aright *> expr)
+lam = Lam <$> (sym "\\" *> name) <*> (aright *> expr)
 
 var :: ExprP
 var = Var <$> name
+
+con :: ExprP
+con = Var <$> conNameP
 
 -- In order to make up work without parens we need to make it right(?)-recursive. I can't be bothered atm.
 app :: ExprP
@@ -291,23 +324,23 @@ app = do
 match :: ExprP
 match = Match <$> (key "match" *> name) <*> match_body
 
-match_body :: P [Alt Text]
+match_body :: P [Alt Name]
 match_body = between (sym "[") (sym "]") alts
 
-alts :: P [Alt Text]
+alts :: P [Alt Name]
 alts = sepBy1 (alt) (sym ",")
 
-type AltP = P (Alt Text)
+type AltP = P (Alt Name)
 alt :: AltP
 alt = litAlt <|> conAlt <|> wildAlt
 
 litAlt, conAlt, wildAlt :: AltP
 litAlt = LitAlt <$> (lit1 <* aright) <*> expr
-conAlt = ConAlt <$> conName <*> many name <*> (aright *> expr)
+conAlt = ConAlt <$> conNameP <*> many name <*> (aright *> expr)
 wildAlt = WildAlt <$> (sym "_" *> aright *> expr)
 
--- name :: P Text
+-- name :: P Name
 -- name = do
 --     c <- lowerChar :: P Char
---     r <- many alphaNumChar :: P Text
+--     r <- many alphaNumChar :: P Name
 --     return $ c <> r

@@ -5,6 +5,7 @@ module Turu.AST.Rename where
 import Turu.Prelude as P
 
 import Turu.AST
+import Turu.AST.Name
 
 import Control.Monad.Trans.State.Strict as ST
 import Data.Char as C
@@ -16,6 +17,7 @@ type RnM a = State RnState a
 runRn :: RnM a -> a
 runRn act = fst $ runState act (initRnState)
 
+initRnState :: RnState
 initRnState = RnState 0 mempty mempty mempty
 
 data RnState = RnState
@@ -35,16 +37,51 @@ nextUniqueM = do
     put s'
     return u
 
-mkNewVar :: Text -> RnM Var
-mkNewVar name
-    -- Constructor Var
-    | C.isUpper first =
-        undefined
-    -- Other var
+mkArgVarInfo :: Name -> VUnique -> RnM IdInfo
+mkArgVarInfo name u
+    -- Constructor
+    | isUpper (T.head $ n_name name) =
+        error "Constructor args not supported"
     | otherwise =
-        undefined
-  where
-    first = T.head name
+        return $ VarInfo u name Nothing
+
+mkArgVar :: Name -> RnM Var
+mkArgVar name = do
+    u <- nextUniqueM
+    unit <- getCurrentUnit
+    info <- mkArgVarInfo name u
+    let var = MkVar u unit info
+    return var
+
+-- Shadow a binder during the given action
+withBinder :: Var -> RnM a -> RnM a
+withBinder new_var act = do
+    s <- get
+    let name = getName new_var
+        vars = r_vars s
+        old_var = HM.lookup name vars
+        with_v = s{r_vars = HM.insert name new_var (r_vars s)}
+
+    -- run action with new_var in scope
+    put with_v
+    r <- act
+
+    -- TODO :: We could split state into re-usable and always changing part
+    -- but this seems easier.
+    -- and put it out of scope again, potentially restoring the old var.
+    let restore = case old_var of
+            Nothing -> delete name
+            Just var -> insert name var
+    s' <- get
+    put $ s'{r_vars = restore $ r_vars s'}
+
+    return r
+
+-- Shadow a binder during the given action
+withBinders :: [Var] -> RnM a -> RnM a
+withBinders [] act = act
+withBinders (v : vs) act =
+    withBinder v $ withBinders vs act
 
 ---------- RN Env Stuff -----------
 
@@ -79,8 +116,8 @@ getFam name = do
 
 getCon :: Name -> RnM (ConDef Var)
 getCon name = do
-    cons <- r_cons <$> get
-    return $ HM.lookupDefault (error $ "Key not found" ++ show name) name cons
+    constrs <- r_cons <$> get
+    return $ HM.lookupDefault (error $ "Key not found" ++ show name) name constrs
 
 getVar :: Name -> RnM Var
 getVar name = do
@@ -91,8 +128,11 @@ getVar name = do
 
 type FamName = Name
 
-renameUnit :: CompilationUnit Text -> RnM (CompilationUnit Var)
-renameUnit (Unit name binders) = Unit name <$> mapM rnBinder binders
+renameUnit :: CompilationUnit Name -> RnM (CompilationUnit Var)
+renameUnit (Unit name binders fams) = do
+    rnBnds <- mapM rnBinder binders
+    rnDefs <- mapM rnFamDef fams
+    return $ Unit name rnBnds rnDefs
 
 rnFamDef :: FamDef Name -> RnM (FamDef Var)
 rnFamDef (FamDef fam_name fam_cons) = mdo
@@ -103,31 +143,10 @@ rnFamDef (FamDef fam_name fam_cons) = mdo
     return $ fam_def
   where
 
--- -- FOR CONSTRUCTORS JOSE
--- doOneCon :: ConDef Text -> RnM [FamDef Var]
--- doOneCon (ConDef _name _tag arg_names) = mdo
---     (names, args) <- unzip <$> mkConArgs $ P.zip arg_names $ args
---     return $ fmap fst args
-
--- mkConArgs :: [(FamName, (FamDef Var, ()))] -> RnM [(FamDef Var, ())]
--- mkConArgs = mapM mkConArg
-
--- mkConArg (arg_fam_name, (future_def, _))
---     | arg_fam_name == fam_name =
---         return (future_def, ())
---     | otherwise = do
---         def <- getFam arg_fam_name
---         return (def, ())
-
--- mkFamDef :: FamDef Var -> (FamDef Var, FamDef Var)
--- mkFamDef = undefined
-
--- List = Cons Any List | Nil
-
-rnConDef :: FamDef Var -> Name -> ConDef Name -> RnM (ConDef Var)
-rnConDef this_fam_def fam_name def@(ConDef con_name tag cd_args) = do
-    (con_args :: [FamDef Var]) <- mapM getFam' cd_args -- Trouble?
-    con_var <- mkConVar fam_name def
+rnConDef :: FamDef Var -> FamName -> ConDef Name -> RnM (ConDef Var)
+rnConDef this_fam_def fam_name def@(ConDef _con_name tag cd_args) = do
+    (con_args :: [FamDef Var]) <- mapM getFam' cd_args -- This ties a knot
+    con_var <- mkConVar fam_name def con_args
     let rn_def = ConDef (cd_var con_var) tag (P.map fd_var con_args) :: ConDef Var
     return rn_def
   where
@@ -135,7 +154,7 @@ rnConDef this_fam_def fam_name def@(ConDef con_name tag cd_args) = do
         | fam_name == arg_fam = pure this_fam_def
         | otherwise = getFam arg_fam
 
--- fam Maybe = Just Any | Nothing
+-- | Make up a var for this fam, and add it to the env
 mkFamVar :: Name -> [ConDef Name] -> RnM Var
 mkFamVar name _cons = do
     u <- nextUniqueM
@@ -146,17 +165,63 @@ mkFamVar name _cons = do
     addVar name fam_var
     return fam_var
 
-mkConVar :: Name -> (ConDef Name) -> RnM (ConDef Var)
-mkConVar fam_name (ConDef con_name con_tag con_arg_tys) = do
+-- | Make up a var for this con, and add it + the con def to the env
+mkConVar :: FamName -> (ConDef Name) -> [FamDef Var] -> RnM (ConDef Var)
+mkConVar _fam_name (ConDef con_name con_tag con_arg_tys) arg_defs = do
     u <- nextUniqueM
     unit <- getCurrentUnit
-    let info = VarInfo u con_name Nothing unit
+    let con_info = DataCon u con_tag con_name arg_defs
+    let info = FamConInfo u con_name con_info
+    -- let info = VarInfo u con_name Nothing unit
     let con_var = MkVar u unit info
-    rn_con_arg_tys <- mapM (getFam) con_arg_tys
+    rn_con_arg_tys <- mapM (getVar) con_arg_tys
     addVar con_name con_var
-    let con_def = ConDef con_var con_tag $ (P.map fd_var rn_con_arg_tys)
+    let con_def = ConDef con_var con_tag $ rn_con_arg_tys
     addCon con_name con_def
     return $ con_def
 
-rnBinder :: Bind Text -> RnM (Bind Var)
-rnBinder = undefined
+rnBinder :: Bind Name -> RnM (Bind Var)
+rnBinder (Bind name rhs) = do
+    u <- nextUniqueM
+    unit <- getCurrentUnit
+    let rhs_unf = Nothing -- We could tie the knot here to store the rhs
+    let v_info = VarInfo u name rhs_unf
+    let var = MkVar u unit v_info
+    Bind var <$> rnRhs rhs
+rnBinder (RecBinds _) = error "Recursive binds not done"
+
+rnRhs :: (Expr Name) -> RnM (Expr Var)
+rnRhs = rnExpr
+
+rnExpr :: (Expr Name) -> RnM (Expr Var)
+rnExpr (Lit l) = return $ Lit l
+rnExpr (Var v) = Var <$> getVar v
+rnExpr (App f args) = do
+    f' <- rnExpr f
+    args' <- mapM rnExpr args
+    return $ App f' args'
+rnExpr (Lam b body) = do
+    b' <- mkArgVar b
+    withBinder b' $ do
+        rnExpr body
+rnExpr (Let bind body) = do
+    bind' <- rnBinder bind
+    let bndrs = binderVars bind'
+    body' <- withBinders bndrs $ rnExpr body
+    return $ Let bind' body'
+rnExpr (Match scrut alts) = rnMatch scrut alts
+
+rnMatch :: Name -> [Alt Name] -> RnM (Expr Var)
+rnMatch scrut alts = do
+    scrut' <- getVar scrut :: (RnM Var)
+    alts' <- mapM rnAlt alts
+    return $ Match scrut' alts'
+
+rnAlt :: Alt Name -> RnM (Alt Var)
+rnAlt (WildAlt rhs) = WildAlt <$> rnRhs rhs
+rnAlt (LitAlt l rhs) = LitAlt l <$> rnRhs rhs
+rnAlt (ConAlt con_name bndrs rhs) = do
+    con_var <- getVar con_name
+    bndrs' <- mapM mkArgVar bndrs
+    rhs' <- withBinders bndrs' $ rnRhs rhs
+    return $ ConAlt con_var bndrs' rhs'

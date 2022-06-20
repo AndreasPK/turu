@@ -17,9 +17,10 @@ tryBuiltin (Var fun) args
             "putChar" -> error "TODO"
             "putStr" -> error "TODO"
             "putInt"
-                | [Var arg] <- args ->
+                | [Var _arg] <- args ->
                     error "TODO"
                 | [Lit lit] <- args ->
                     trace ("putInt " ++ show lit) $ return (Lit $ LitInt 42)
             "getInt" -> return $ mkIntE 42
+            _ -> error "NoBuiltin"
 tryBuiltin fun args = error $ "Invalid builtin application" ++ show fun ++ " " ++ show args

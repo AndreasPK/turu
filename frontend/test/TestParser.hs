@@ -7,6 +7,7 @@ import Test.Tasty.HUnit
 -- import Test.Tasty.SmallCheck as SC
 
 import Turu.AST
+import Turu.AST.Name
 import Turu.Parser as P
 
 import Data.List
@@ -43,29 +44,33 @@ tests = testGroup "Tests" [unitTests]
 --         (n :: Integer) >= 3 QC.==> x^n + y^n /= (z^n :: Integer)
 --   ]
 
+unitTests :: TestTree
 unitTests =
     testGroup
         "Unit tests"
         [ testCase "application" $
-            let result = App "a" ["b"] :: Expr Text
+            let result = App "a" ["b"] :: Expr Name
              in runParser "(a b)" P.expr @?= Just result
         , testCase "match" $
-            let result = Match "s" [ConAlt "Con" ["x", "y"] "x"] :: Expr Text
+            let result = Match "s" [ConAlt "Con" ["x", "y"] "x"] :: Expr Name
              in runParser "match s [Con x y -> x]" P.expr @?= Just result
         , testCase "bind" $
-            let result = Bind "f" (Lam "x" "x") :: Bind Text
+            let result = Bind "f" (Lam "x" "x") :: Bind Name
              in runParser "f x = x" P.bind @?= Just result
         , testCase "let" $
-            let result = Let (Bind "f" (Lam "x" "x")) (App "f" ["y"]) :: Expr Text
+            let result = Let (Bind "f" (Lam "x" "x")) (App "f" ["y"]) :: Expr Name
              in runParser "let f x = x in (f y)" P.expr @?= Just result
+        , testCase "lam" $
+            let result = Lam "x" "x" :: Expr Name
+             in runParser "(\\x -> x)" P.expr @?= Just result
         , testCase "let2" $
-            let result = Let (Bind "f" (Lam "y" $ Lam "x" "x")) (App "f" ["y"]) :: Expr Text
+            let result = Let (Bind "f" (Lam "y" $ Lam "x" "x")) (App "f" ["y"]) :: Expr Name
              in runParser "let f y x = x in (f y)" P.expr @?= Just result
         , testCase "unit1" $
-            let result = Unit "myUnit" []
+            let result = Unit "myUnit" [] []
              in runParser "unit myUnit \n" P.unit @?= Just result
         , testCase "unit2" $
-            let result = Unit "myUnit" [Bind "f" $ Lam "x" "x"]
+            let result = Unit "myUnit" [Bind (mkName "myUnit" "f") $ Lam (mkName "myUnit" "x") (Var $ mkName "myUnit" "x")] []
              in runParser "unit myUnit \nf x = x" P.unit @?= Just result
         , testCase "conDef" $
             let result = FamDef "Bool" [ConDef "True" 0 [], ConDef "False" 1 []]
