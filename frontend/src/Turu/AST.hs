@@ -54,6 +54,12 @@ instance Printable Var where
 instance HasName Var where
     getName (MkVar{v_info}) = info_name v_info
 
+getVarConArgs :: Var -> Maybe [FamDef Var]
+getVarConArgs (MkVar{v_info})
+    | FamConInfo{info_con} <- v_info =
+        Just $ c_fields info_con
+    | otherwise = Nothing
+
 -- | Information about an id shared by all occurences, stored in the symbol table.
 data IdInfo
     = VarInfo

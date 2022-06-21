@@ -8,6 +8,7 @@ import Turu.AST
 import Turu.AST.Name
 import Turu.Pretty
 
+import Control.Applicative
 import Control.Monad.State.Strict
 import qualified Control.Monad.Trans.State.Strict as TS
 import Data.Char
@@ -46,7 +47,12 @@ runEM act = fst $ runState (coerce $ act) (initEvalState)
 type Code = Expr Var
 type Data = Map Name Closure
 
-data Closure = FunClosure Code Data | Fun Code | Obj (Expr Var)
+noData = mempty
+data Closure
+    = FunClosure Code Data
+    | Fun Code
+    | -- | Objects have no fvs
+      Obj (Expr Var)
 
 evalWithUnit :: Expr Var -> CompilationUnit Var -> Expr Var
 evalWithUnit expr unit = runEM $ stepWithUnit expr unit
@@ -58,6 +64,7 @@ evalExpr expr =
 
 --- Closure land starts here
 
+-- TODO
 stepWithUnit :: Expr Var -> CompilationUnit Var -> EM (Expr Var)
 stepWithUnit expr (Unit{unit_binds, unit_fams}) = do
     addCons
@@ -72,15 +79,30 @@ stepWithUnit expr (Unit{unit_binds, unit_fams}) = do
     addBind (Bind b rhs) = addTopBind (getName b) rhs
     addBind (RecBinds pairs) = mapM_ (\(b, rhs) -> addTopBind (getName b) rhs) pairs
 
-getVal :: HasCallStack => Name -> EM (Expr Var)
-getVal name = do
+getVal :: Name -> EM Closure
+getVal name =
+    fromMaybe (error $ show name <> " not in lookup scope")
+        <$> (getHeapVal name <|> getTopVal name)
+
+getHeapVal :: HasCallStack => Name -> EM (Maybe Closure)
+getHeapVal name = do
     s <- get
     let m = var_heap s
-        v = fromMaybe (error $ "undef var" ++ ppShow name) $ M.lookup name m
+        v = M.lookup name m
     return v
 
+getTopVal :: Name -> EM (Maybe Closure)
+getTopVal name = do
+    m <- var_top <$> get
+    return (Obj <$> M.lookup name m)
+
+captureFvEnv :: Expr Var -> EM Data
+captureFvEnv _ = do
+    -- TODO: Only capture free variables
+    var_heap <$> get
+
 -- Run the computation with v = val and restore old state after
-withVarVal :: Name -> Expr Var -> EM a -> EM a
+withVarVal :: Name -> Closure -> EM a -> EM a
 withVarVal name val act = do
     s <- get
     put $ s{var_heap = M.insert name val (var_heap s)}
@@ -88,36 +110,54 @@ withVarVal name val act = do
     put s
     return r
 
-withVarVals :: [Name] -> [Expr Var] -> EM a -> EM a
+withVarVals :: [Name] -> [Closure] -> EM a -> EM a
 withVarVals [] [] act = act
 withVarVals (n : ns) (v : vs) act = do
     withVarVal n v $ withVarVals ns vs act
 withVarVals _ _ _ = error "withVarVals: missmatched args"
 
-stepExpr :: HasCallStack => Int -> Expr Var -> EM (Expr Var)
-stepExpr 0 e = return e
+stepExpr :: HasCallStack => Int -> Code -> EM (Closure)
+stepExpr 0 e = error $ "TODO:stepExpr 0" ++ ppShow e
 stepExpr _ e
     | trace ("stepExpr:" <> ppShow e) False =
         undefined
-stepExpr _ (Lit l) = return $ Lit l
+stepExpr _ (Lit l) = return $ Obj $ Lit l
 stepExpr n (App f args) = stepApp n f args
 stepExpr _ (Var v)
     | isConName (getName v) =
-        pure $ Var v
-    -- TODO: Closure
+        pure $ Fun $ Var v
     | otherwise = getVal $ getName v
-stepExpr _ (Lam b rhs) = pure (Lam b rhs)
+stepExpr _ (Lam b rhs) = FunClosure (Lam b rhs) <$> captureFvEnv rhs -- TODO: Without b
 stepExpr n (Let bind body) = evalLet n bind body
 stepExpr n (Match scrut alts) = stepMatch n scrut alts
 
+stepClosure :: Int -> Closure -> Closure
+stepClosure n c@(Obj _) = c
+stepClosure n c@FunClosure{} = c
+stepClosure n = ???
+
 -- Con x y => Con [eval x] [eval y]
-stepApp :: HasCallStack => Int -> Expr Var -> [Expr Var] -> EM (Expr Var)
+stepApp :: HasCallStack => Int -> Closure -> [Closure] -> EM (Closure)
 stepApp n f args
     | trace ("stepApp:" <> ppShow (f, args)) False =
         undefined
-stepApp n c@(Var con) args
-    | isConName (getName con) =
-        App c <$> mapM (stepExpr (n - 1)) args
+-- conapp
+stepApp n c@(Fun (Var con)) args
+    -- nullary con
+    | isConName (getName con)
+    , P.null (getVarConArgs con) =
+        assert (P.null args) "Nullary constructor applied to args" $
+            return $
+                Obj $
+                    Var con
+    | isConName (getName con)
+    , arity <- length ((getVarConArgs con)) =
+        assert (arity >= length args) "Oversat con app" $ do
+            args' <- mapM (stepExpr (n - 1)) args
+            if length args < arity
+                then FunClosure (App (Var con) args') noData
+                else FunClosure (App (Var con) args') noData
+
 -- stepApp n f [] = stepExpr (n - 1) f
 -- (\x -> body) arg => [eval body{x/[eval body]}]
 stepApp n (Lam b rhs) (a : args) = do
