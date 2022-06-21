@@ -33,7 +33,6 @@ executable frontend
         Turu.AST.Rename
         Turu.Prelude
         Turu.SymTab
-        Turu.Eval
         Turu.Eval.Reduce
         Turu.Parser
         Turu.Pretty
@@ -90,7 +89,6 @@ executable test-parser
         Turu.AST.Utils
         Turu.Prelude
         Turu.SymTab
-        Turu.Eval
         Turu.Eval.Reduce
         Turu.Parser
         Turu.Pretty

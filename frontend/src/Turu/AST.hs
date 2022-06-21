@@ -41,6 +41,9 @@ data Var
       }
     deriving (Show)
 
+instance Eq Var where
+    (==) v1 v2 = (v_unit v1, getName v1) == (v_unit v2, getName v2)
+
 -- instance Show Var where
 --     show MkVar { v_unique, v_unit, v_info } =
 --         show v_unique <> ":" <> show v_unit <> ":" <> show v_info
@@ -100,6 +103,8 @@ data DataCon
 instance Printable (DataCon) where
     ppr = ppDoc
 
+-- Should we have a con app case in Expr?
+
 -- | Initially a identifier can just be a string so we parametrize
 data Expr identifier
     = Lit Literal
@@ -110,6 +115,7 @@ data Expr identifier
     | Match {e_scrut :: identifier, e_alts :: [Alt identifier]}
     deriving (Show, Eq)
 
+type VExpr = Expr Var
 instance (Printable a, Show a) => Printable (Expr a) where
     ppr = ppDoc
 
@@ -139,11 +145,17 @@ data FamDef identifier = FamDef {fd_var :: ~identifier, fd_cons :: ~[ConDef iden
 instance (Printable a, Show a) => Printable (FamDef a) where
     ppr = ppDoc
 
+getFamCons :: FamDef i -> [ConDef i]
+getFamCons = fd_cons
+
 data ConDef identifier = ConDef {cd_var :: ~identifier, cd_tag :: Tag, cd_args :: ~[identifier]}
     deriving (Eq, Show)
 
 instance (Printable a, Show a) => Printable (ConDef a) where
     ppr = ppDoc
+
+instance HasName a => HasName (ConDef a) where
+    getName = getName . cd_var
 
 data Bind identifier
     = Bind identifier (Expr identifier)

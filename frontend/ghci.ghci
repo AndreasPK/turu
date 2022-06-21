@@ -1,0 +1,23 @@
+:r
+
+import Data.Maybe
+import Text.Megaparsec as M hiding (runParser)
+import Text.Megaparsec.Char as M
+import qualified Text.Megaparsec.Char.Lexer as L
+import Text.Megaparsec.Debug
+import Text.Show.Pretty (ppShow)
+import Data.Text
+
+import Turu.AST
+import Turu.AST.Name
+import Turu.AST.Rename
+import Turu.AST.Utils
+import Turu.Eval.Reduce
+import Turu.Parser as P
+import Turu.Pretty
+
+-- rnExpr1 :: Text -> Expr Var
+rnExpr1 sexpr = runRn $ rnExpr $ fromMaybe (error "ParseError") $ runParser sexpr P.expr
+
+-- rnUnit1 :: Text -> CompilationUnit Var
+rnUnit1 s_unit = runRn $ rnUnit $ fromMaybe (error "ParseError") $ runParser s_unit P.unit

@@ -10,27 +10,67 @@ import Turu.Pretty
 
 import Control.Monad.State.Strict
 import qualified Control.Monad.Trans.State.Strict as TS
+import Data.Char
 import Data.Coerce
 import Data.Map.Strict as M
+import Data.Set as S
 import Debug.Trace
 import GHC.Stack
 import Text.Show.Pretty (ppShow)
 
-newtype EvalState = EvalState {var_heap :: (Map Name (Expr Var))}
+data EvalState = EvalState {var_heap :: (Map Name Closure), var_cons :: Set Name, var_top :: (Map Name (Expr Var))}
+
+addCon :: Name -> EM ()
+addCon name = do
+    s <- get
+    put $ s{var_cons = S.insert name (var_cons s)}
+
+addTopBind :: Name -> (Expr Var) -> EM ()
+addTopBind name rhs = do
+    s <- get
+    put $ s{var_top = M.insert name rhs (var_top s)}
+
+initEvalState :: EvalState
+initEvalState = EvalState mempty mempty mempty
 
 newtype EM a = EM (State EvalState a)
     deriving (Functor, Applicative, Monad)
 
-evalExpr :: Expr Var -> Expr Var
-evalExpr expr =
-    let (r, _s) = runState (coerce (stepExpr 99 expr)) (EvalState mempty)
-     in r
-
--- class Monad m => MonadState s m | m -> s where
-
 instance MonadState EvalState (EM) where
     put s = EM $ put s
     get = EM $ get
+
+runEM :: EM a -> a
+runEM act = fst $ runState (coerce $ act) (initEvalState)
+
+type Code = Expr Var
+type Data = Map Name Closure
+
+data Closure = FunClosure Code Data | Fun Code | Obj (Expr Var)
+
+evalWithUnit :: Expr Var -> CompilationUnit Var -> Expr Var
+evalWithUnit expr unit = runEM $ stepWithUnit expr unit
+
+evalExpr :: Expr Var -> Expr Var
+evalExpr expr =
+    let (r, _s) = runState (coerce $ stepExpr 99 expr) (initEvalState)
+     in r
+
+--- Closure land starts here
+
+stepWithUnit :: Expr Var -> CompilationUnit Var -> EM (Expr Var)
+stepWithUnit expr (Unit{unit_binds, unit_fams}) = do
+    addCons
+    addBinds
+
+    stepExpr (P.foldr (\c r -> ord c * r) 0 ("Josè" :: String)) expr
+  where
+    addCons :: EM ()
+    addCons = mapM_ addCon $ fmap getName (concat $ fmap getFamCons unit_fams)
+    addBinds :: EM ()
+    addBinds = mapM_ addBind unit_binds
+    addBind (Bind b rhs) = addTopBind (getName b) rhs
+    addBind (RecBinds pairs) = mapM_ (\(b, rhs) -> addTopBind (getName b) rhs) pairs
 
 getVal :: HasCallStack => Name -> EM (Expr Var)
 getVal name = do
@@ -64,6 +104,7 @@ stepExpr n (App f args) = stepApp n f args
 stepExpr _ (Var v)
     | isConName (getName v) =
         pure $ Var v
+    -- TODO: Closure
     | otherwise = getVal $ getName v
 stepExpr _ (Lam b rhs) = pure (Lam b rhs)
 stepExpr n (Let bind body) = evalLet n bind body
@@ -86,6 +127,8 @@ stepApp n (Lam b rhs) (a : args) = do
     -- Apply next argument if any
     stepApp (n - 2) app1 args
 -- f args => eval[f] args
+
+stepApp n f [] = stepExpr (n - 1) f
 stepApp n f args = do
     f' <- stepExpr (n - 1) f
     case f' of

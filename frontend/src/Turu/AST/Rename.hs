@@ -128,10 +128,10 @@ getVar name = do
 
 type FamName = Name
 
-renameUnit :: CompilationUnit Name -> RnM (CompilationUnit Var)
-renameUnit (Unit name binders fams) = do
-    rnBnds <- mapM rnBinder binders
+rnUnit :: CompilationUnit Name -> RnM (CompilationUnit Var)
+rnUnit (Unit name binders fams) = do
     rnDefs <- mapM rnFamDef fams
+    rnBnds <- mapM rnBinder binders
     return $ Unit name rnBnds rnDefs
 
 rnFamDef :: FamDef Name -> RnM (FamDef Var)
@@ -203,7 +203,7 @@ rnExpr (App f args) = do
 rnExpr (Lam b body) = do
     b' <- mkArgVar b
     withBinder b' $ do
-        rnExpr body
+        Lam b' <$> rnExpr body
 rnExpr (Let bind body) = do
     bind' <- rnBinder bind
     let bndrs = binderVars bind'
