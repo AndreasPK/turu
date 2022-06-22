@@ -87,6 +87,7 @@ executable test-parser
         Turu.AST
         Turu.AST.Name
         Turu.AST.Utils
+        Turu.AST.Rename
         Turu.Prelude
         Turu.SymTab
         Turu.Eval.Reduce

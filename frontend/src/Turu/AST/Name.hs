@@ -4,6 +4,7 @@ import Turu.Prelude
 import Turu.Pretty
 
 import Data.Char as C
+import Data.Coerce
 import Data.Hashable
 import Data.String
 import Data.Text as T
@@ -20,7 +21,13 @@ data Name = Name
     , n_unit :: Maybe UnitName
     -- ^ Nothing <-> it's a local id. Like arguments or local binders
     }
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord)
+
+instance Show Name where
+    show (Name{n_name, n_unit})
+        | Just unit <- n_unit =
+            show $ T.unpack (coerce unit) <> ":" <> T.unpack n_name
+        | otherwise = show n_name
 
 instance Printable Name where
     ppr (Name{n_name, n_unit})

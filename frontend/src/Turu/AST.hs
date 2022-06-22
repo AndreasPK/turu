@@ -35,24 +35,25 @@ data Var
       -- | something from another unit
       MkVar
       { v_unique :: VUnique
-      , v_unit :: UnitName
-      , -- TODO: Move the name from VarInfo into Var, (replacing UnitName here)
-        v_info :: IdInfo
+    -- ^ Currently not really used - sadface
+      , v_name :: Name
+    -- ^ Human name for id, we consider vars with the same name to reference the same thing currently.
+      , v_info :: IdInfo
       }
     deriving (Show)
 
 instance Eq Var where
-    (==) v1 v2 = (v_unit v1, getName v1) == (v_unit v2, getName v2)
+    (==) v1 v2 = v_name v1 == v_name v2
 
 -- instance Show Var where
 --     show MkVar { v_unique, v_unit, v_info } =
 --         show v_unique <> ":" <> show v_unit <> ":" <> show v_info
 
 instance Printable Var where
-    ppr MkVar{v_unit} = parens (ppr v_unit)
+    ppr MkVar{v_name} = parens (ppr v_name)
 
 instance HasName Var where
-    getName (MkVar{v_info}) = info_name v_info
+    getName v = v_name v
 
 getVarConArgs :: Var -> Maybe [FamDef Var]
 getVarConArgs (MkVar{v_info})
@@ -60,30 +61,28 @@ getVarConArgs (MkVar{v_info})
         Just $ c_fields info_con
     | otherwise = Nothing
 
+mkValVar :: VUnique -> Text -> UnitName -> Var
+mkValVar u n unit = MkVar{v_unique = u, v_name = mkName unit n, v_info = simpValInfo}
+
+simpValInfo :: IdInfo
+simpValInfo = VarInfo Nothing
+
 -- | Information about an id shared by all occurences, stored in the symbol table.
 data IdInfo
     = VarInfo
-        { info_unique :: VUnique
-        -- ^ key for this id
-        , info_name :: Name
-        -- ^ Human name for id
-        , info_impl :: Maybe (Expr Var)
+        { info_impl :: Maybe (Expr Var)
         -- ^ The rhs if applicable. For now actually unused!
         }
     | -- | Also covers fams
       FamConInfo
-        { info_unique :: VUnique
-        -- ^ key for this id
-        , info_name :: Name
-        -- ^ Human name for id
-        , info_con :: ~DataCon
+        { info_con :: ~DataCon
         }
 
 -- deriving (Show)
 
 instance Show IdInfo where
-    show var@VarInfo{} = "v:" <> show (info_name var)
-    show var@FamConInfo{} = "c:" <> show (info_name var)
+    show _var@VarInfo{} = "VarInfo{}"
+    show _var@FamConInfo{} = "FamConInfo{}"
 
 instance Printable (IdInfo) where
     ppr = ppDoc

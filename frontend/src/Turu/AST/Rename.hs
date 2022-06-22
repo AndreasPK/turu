@@ -11,6 +11,7 @@ import Control.Monad.Trans.State.Strict as ST
 import Data.Char as C
 import Data.HashMap.Strict as HM
 import Data.Text as T
+import GHC.Stack
 
 type RnM a = State RnState a
 
@@ -38,19 +39,18 @@ nextUniqueM = do
     return u
 
 mkArgVarInfo :: Name -> VUnique -> RnM IdInfo
-mkArgVarInfo name u
+mkArgVarInfo name _u
     -- Constructor
     | isUpper (T.head $ n_name name) =
         error "Constructor args not supported"
     | otherwise =
-        return $ VarInfo u name Nothing
+        return $ VarInfo Nothing
 
 mkArgVar :: Name -> RnM Var
 mkArgVar name = do
     u <- nextUniqueM
-    unit <- getCurrentUnit
     info <- mkArgVarInfo name u
-    let var = MkVar u unit info
+    let var = MkVar u name info
     return var
 
 -- Shadow a binder during the given action
@@ -109,17 +109,17 @@ addVar name thing = do
     let things' = HM.insert name thing things
     put $ s{r_vars = things'}
 
-getFam :: Name -> RnM (FamDef Var)
+getFam :: HasCallStack => Name -> RnM (FamDef Var)
 getFam name = do
     fams <- r_fams <$> get
     return $ HM.lookupDefault (error $ "Key not found" ++ show name) name fams
 
-getCon :: Name -> RnM (ConDef Var)
+getCon :: HasCallStack => Name -> RnM (ConDef Var)
 getCon name = do
     constrs <- r_cons <$> get
     return $ HM.lookupDefault (error $ "Key not found" ++ show name) name constrs
 
-getVar :: Name -> RnM Var
+getVar :: HasCallStack => Name -> RnM Var
 getVar name = do
     vars <- r_vars <$> get
     return $ HM.lookupDefault (error $ "Key not found" ++ show name) name vars
@@ -158,10 +158,9 @@ rnConDef this_fam_def fam_name def@(ConDef _con_name tag cd_args) = do
 mkFamVar :: Name -> [ConDef Name] -> RnM Var
 mkFamVar name _cons = do
     u <- nextUniqueM
-    unit <- getCurrentUnit
     let fam_con = FamCon u 1 name []
-    let info = FamConInfo u name fam_con
-    let fam_var = MkVar{v_unique = u, v_unit = unit, v_info = info}
+    let info = FamConInfo fam_con
+    let fam_var = MkVar{v_unique = u, v_name = name, v_info = info}
     addVar name fam_var
     return fam_var
 
@@ -169,11 +168,10 @@ mkFamVar name _cons = do
 mkConVar :: FamName -> (ConDef Name) -> [FamDef Var] -> RnM (ConDef Var)
 mkConVar _fam_name (ConDef con_name con_tag con_arg_tys) arg_defs = do
     u <- nextUniqueM
-    unit <- getCurrentUnit
     let con_info = DataCon u con_tag con_name arg_defs
-    let info = FamConInfo u con_name con_info
+    let info = FamConInfo con_info
     -- let info = VarInfo u con_name Nothing unit
-    let con_var = MkVar u unit info
+    let con_var = MkVar u con_name info
     rn_con_arg_tys <- mapM (getVar) con_arg_tys
     addVar con_name con_var
     let con_def = ConDef con_var con_tag $ rn_con_arg_tys
@@ -183,10 +181,10 @@ mkConVar _fam_name (ConDef con_name con_tag con_arg_tys) arg_defs = do
 rnBinder :: Bind Name -> RnM (Bind Var)
 rnBinder (Bind name rhs) = do
     u <- nextUniqueM
-    unit <- getCurrentUnit
+    -- unit <- getCurrentUnit
     let rhs_unf = Nothing -- We could tie the knot here to store the rhs
-    let v_info = VarInfo u name rhs_unf
-    let var = MkVar u unit v_info
+    let v_info = VarInfo rhs_unf
+    let var = MkVar u name v_info
     Bind var <$> rnRhs rhs
 rnBinder (RecBinds _) = error "Recursive binds not done"
 
@@ -195,7 +193,10 @@ rnRhs = rnExpr
 
 rnExpr :: (Expr Name) -> RnM (Expr Var)
 rnExpr (Lit l) = return $ Lit l
-rnExpr (Var v) = Var <$> getVar v
+rnExpr (Var v) =
+    if isConName v
+        then Var . cd_var <$> (getCon v)
+        else Var <$> getVar v
 rnExpr (App f args) = do
     f' <- rnExpr f
     args' <- mapM rnExpr args

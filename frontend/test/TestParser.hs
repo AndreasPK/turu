@@ -91,19 +91,17 @@ unitTests =
             ]
         , testGroup
             "Eval tests"
-            [ testCase "lam" $
-                let result = Lit (LitInt 1) :: Expr Var
+            [ testCase "lam1" $
+                let result = Obj (LitInt 1) :: Closure
                  in evalExpr (rnExpr1 "((\\x -> x) 1)") @?= result
-            , testCase "lam" $
-                let result = Lit (LitInt 1) :: Expr Var
+            , testCase "lam2" $
+                let result = Obj (LitInt 1) :: Closure
                     unit =
                         ( rnUnit1
-                            ( "unit myUnit \n"
-                                <> "fam AB = A | B\n"
-                                <> "f = let a = A in match a [A ->1, B->2]"
+                            ( "unit myUnit \n" <> "fam AB = A | B\n" <> "f = let a = A in match a [A ->1, B->2]"
                             )
                         )
-                    expr = rnExpr1 "f"
+                    expr = Var $ MkVar 0 (mkName "myUnit" "f") simpValInfo
                  in (evalWithUnit expr unit) @?= result
             ]
         ]
