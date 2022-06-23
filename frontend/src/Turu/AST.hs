@@ -113,8 +113,8 @@ instance Printable (DataCon) where
 -- | Initially a identifier can just be a string so we parametrize
 data Expr identifier
     = Lit Literal
-    | App (Expr identifier) [Expr identifier]
     | Var identifier
+    | App (Expr identifier) [Expr identifier]
     | Lam identifier (Expr identifier)
     | Let (Bind identifier) (Expr identifier)
     | Match {e_scrut :: identifier, e_alts :: [Alt identifier]}
@@ -153,7 +153,7 @@ instance (Printable a, Show a) => Printable (FamDef a) where
 getFamCons :: FamDef i -> [ConDef i]
 getFamCons = fd_cons
 
-data ConDef identifier = ConDef {cd_var :: ~identifier, cd_tag :: Tag, cd_args :: ~[identifier]}
+    data ConDef identifier = ConDef {cd_var :: ~identifier, cd_tag :: Tag, cd_args :: ~[identifier]}
     deriving (Eq, Show)
 
 instance (Printable a, Show a) => Printable (ConDef a) where

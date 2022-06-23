@@ -57,7 +57,8 @@ addTopBindsRec pairs =
                                          _ -> (loop (sub x))]
                 }
         The usual thing would be to generate two opaque labels for match, and generate the rhss with
-        those labels in scope.
+        those labels in scope. We can do so here only if we can create closures for all the rhss without
+        having to look into any other rhs.
 
         -}
         -- couldn't get the mdo trick to work here so we do something stupid instead:
@@ -74,6 +75,20 @@ addTopBindsRec pairs =
         s <- get
         let name' = getName name
         put $ s{var_top = M.insert name' rhs' (var_top s), var_heap = M.insert name' rhs' (var_heap s)}
+
+-- Only returns a closure for what ocaml calls a "statically constructed expression"
+mkTopClosure :: [Var] -> [Closure] -> Expr Var -> Maybe Closure
+mkTopClosure rec_bnds cls (Lit l) = Obj l
+mkTopClosure rec_bnds cls code@(Var v)
+    | v `P.elem` rec_bnds = error $ "Invalid rec let" <> show code
+    | otherwise = Ind <$> getVal v
+mkTopClosure rec_bnds cls code@(Lam v body) =
+    -- Danger - knot tying
+    FunClosure code <$> (captureFvEnv code <> M.fromList (zip rec_bnds cls))
+
+mkTopClosure rec_bnds cls code@(Lam v body) =
+
+
 
 initEvalState :: EvalState
 initEvalState = EvalState mempty mempty mempty 0
@@ -99,8 +114,9 @@ type Code = Expr Var
 type Data = Map Name Closure
 
 data Closure
-    = FunClosure {closure_code :: Code, closure_data :: Data}
+    = FunClosure {closure_code :: Code, closure_data :: ~Data}
     | Fun {closure_code :: Code}
+    | Ind Closure
     | -- | Objects have no fvs
       Obj Literal
     | -- | a fully applied constructor
