@@ -30,7 +30,8 @@ We want to rely on parantheses quite a lot for a start. A fully formed unit woul
 
 unit Fib -- This is a comment - unit <Name> starts a new compilation unit.
 
-fib n = match n of
+let rec
+    fib n = match n of
         [   0 -> (0)
         ,   1 -> (1)
         ,   _ -> (+) (fib (n-1)) (fib (n-2))
@@ -64,7 +65,10 @@ consDefs
 con = upperCaseName fam_name
 
 -- args are sugar for lambdas on rhs
-bind = <name> arg_list '=' expr
+bind = rec many bind1
+     | bind1
+
+bind1 = let <name> arg_list '=' expr
 
 -- Maybe try to allow expr1 instead of expr where possible?
 expr = '(' expr1 ')'
@@ -168,7 +172,7 @@ parseFile file = do
 -- Actual parsers
 
 keywords :: [Text]
-keywords = ["match", "in", "let", "fam", "Any"]
+keywords = ["match", "in", "let", "fam", "Any", "rec"]
 
 lineComment :: P ()
 lineComment = L.skipLineComment "--"
@@ -257,20 +261,30 @@ consDef tag = do
     return $ ConDef con_name tag con_args
 
 bind :: P (Bind Name)
-bind = do
+bind = rec_bind <|> (uncurry Bind) <$> bind1
+
+rec_bind :: P (Bind Name)
+rec_bind = do
+    void $ key "rec" *> sym "{"
+    binds <- manyTill bind1 (sym "}")
+    return $ RecBinds binds
+
+bind1 :: P (Name, Expr Name)
+bind1 = do
+    key "let"
     n <- name
     args <- many name
     _ <- sym "="
     e <- expr
-    return $ Bind n (mkLams args e)
+    return $ (n, (mkLams args e))
 
 type ExprP = P (Expr Name)
 
--- expression without parens
+-- expression with or without parens
 expr :: ExprP
 expr = try (pleft *> expr1 <* pright) <|> try var <|> try con <|> try lit <|> try letp <|> try match
 
--- ( expr )
+-- subexpression, only used where no parens can appear
 expr1 :: ExprP
 expr1 = try app <|> try lam <|> expr
 
@@ -335,9 +349,9 @@ alt :: AltP
 alt = litAlt <|> conAlt <|> wildAlt
 
 litAlt, conAlt, wildAlt :: AltP
-litAlt = LitAlt <$> (lit1 <* aright) <*> expr
-conAlt = ConAlt <$> conNameP <*> many name <*> (aright *> expr)
-wildAlt = WildAlt <$> (sym "_" *> aright *> expr)
+litAlt = LitAlt <$> (lit1 <* aright) <*> expr1
+conAlt = ConAlt <$> conNameP <*> many name <*> (aright *> expr1)
+wildAlt = WildAlt <$> (sym "_" *> aright *> expr1)
 
 -- name :: P Name
 -- name = do

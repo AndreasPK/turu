@@ -1,4 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RecursiveDo #-}
 
 module Turu.Eval.Reduce where
 
@@ -13,7 +14,7 @@ import Control.Monad.State.Strict
 import qualified Control.Monad.Trans.State.Strict as TS
 import Data.Char
 import Data.Coerce
-import Data.Map.Strict as M
+import Data.Map.Lazy as M
 import Data.Set as S
 import qualified Data.Text as T
 import Debug.Trace
@@ -26,9 +27,9 @@ import Turu.AST.Utils
 ----------------------------------------
 
 data EvalState = EvalState
-    { var_heap :: (Map Name Closure)
+    { var_heap :: ~(Map Name Closure)
     , var_cons :: Set Name
-    , var_top :: (Map Name Closure)
+    , var_top :: ~(Map Name Closure)
     , next_unique :: VUnique
     -- ^ Sometimes we need to bind a closure to a variable, we use these to make up a name
     }
@@ -45,16 +46,40 @@ addTopBind name rhs = do
     put $ s{var_top = M.insert name rhs' (var_top s), var_heap = M.insert name rhs' (var_heap s)}
 
 addTopBindsRec :: [(Var, VExpr)] -> EM ()
-addTopBindsRec _pairs = error "TODO"
-{- ^ This will be tricky, we want to execute each rhs with all other rhss already bound.
- Probably needs some knot-tying to make this work.
--}
+addTopBindsRec pairs =
+    mdo
+        let (var_in, rhss_in) = unzip pairs
+        {-
+        if we have
+            rec { let end x = match x [ 0 -> 0, _ -> 1]
+                  let loop x = match x [ 0 -> (end x),
+                                         1 -> (end x),
+                                         _ -> (loop (sub x))]
+                }
+        The usual thing would be to generate two opaque labels for match, and generate the rhss with
+        those labels in scope.
+
+        -}
+        -- couldn't get the mdo trick to work here so we do something stupid instead:
+        s <- get
+        let rec_cl_context = var_heap s
+            rec_cl_self = fmap Fun rhss_in
+
+        -- TODO: Not sure if the box/lazy match is required
+        ~rhss <- (withVarVals (fmap getName var_in) rhss $ mapM (stepExpr 9999) rhss_in)
+        zipWithM_ insertClosure var_in rhss
+  where
+    insertClosure :: Var -> Closure -> EM ()
+    insertClosure name rhs' = do
+        s <- get
+        let name' = getName name
+        put $ s{var_top = M.insert name' rhs' (var_top s), var_heap = M.insert name' rhs' (var_heap s)}
 
 initEvalState :: EvalState
 initEvalState = EvalState mempty mempty mempty 0
 
 newtype EM a = EM (State EvalState a)
-    deriving (Functor, Applicative, Monad)
+    deriving (Functor, Applicative, Monad, MonadFix)
 
 alt_em :: Monad m => m (Maybe a) -> m (Maybe a) -> m (Maybe a)
 alt_em a b = do
@@ -73,7 +98,6 @@ runEM act = fst $ runState (coerce $ act) (initEvalState)
 type Code = Expr Var
 type Data = Map Name Closure
 
--- No thunks here! The madness of eager languages
 data Closure
     = FunClosure {closure_code :: Code, closure_data :: Data}
     | Fun {closure_code :: Code}

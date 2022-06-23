@@ -14,6 +14,7 @@ import Turu.Parser as P
 
 import Data.List
 import Data.Ord
+import Text.Megaparsec.Debug (dbg)
 import Turu.Prelude
 
 main = defaultMain tests
@@ -57,7 +58,7 @@ unitTests =
     testGroup
         "tests"
         [ testGroup
-            "Unit tests"
+            "Parse tests"
             [ testCase "application" $
                 let result = App "a" ["b"] :: Expr Name
                  in runParser "(a b)" P.expr @?= Just result
@@ -66,7 +67,10 @@ unitTests =
                  in runParser "match s [Con x y -> x]" P.expr @?= Just result
             , testCase "bind" $
                 let result = Bind "f" (Lam "x" "x") :: Bind Name
-                 in runParser "f x = x" P.bind @?= Just result
+                 in runParser "let f x = x" P.bind @?= Just result
+            , testCase "rec-bind" $
+                let result = RecBinds [("f", (Lam "x" "x"))] :: Bind Name
+                 in runParser "rec { let f x = x }" (dbg "" P.bind) @?= Just result
             , testCase "let" $
                 let result = Let (Bind "f" (Lam "x" "x")) (App "f" ["y"]) :: Expr Name
                  in runParser "let f x = x in (f y)" P.expr @?= Just result
@@ -81,7 +85,7 @@ unitTests =
                  in runParser "unit myUnit \n" P.unit @?= Just result
             , testCase "unit2" $
                 let result = Unit "myUnit" [Bind (mkName "myUnit" "f") $ Lam (mkName "myUnit" "x") (Var $ mkName "myUnit" "x")] []
-                 in runParser "unit myUnit \nf x = x" P.unit @?= Just result
+                 in runParser "unit myUnit \nlet f x = x" P.unit @?= Just result
             , testCase "conDef" $
                 let result = FamDef "Bool" [ConDef "True" 0 [], ConDef "False" 1 []]
                  in runParser "fam Bool = True | False" P.famDef @?= Just result
@@ -98,7 +102,16 @@ unitTests =
                 let result = Obj (LitInt 1) :: Closure
                     unit =
                         ( rnUnit1
-                            ( "unit myUnit \n" <> "fam AB = A | B\n" <> "f = let a = A in match a [A ->1, B->2]"
+                            ( "unit myUnit \n" <> "fam AB = A | B\n" <> "let f = let a = A in match a [A ->1, B->2]"
+                            )
+                        )
+                    expr = Var $ MkVar 0 (mkName "myUnit" "f") simpValInfo
+                 in (evalWithUnit expr unit) @?= result
+            , testCase "lam3" $
+                let result = Obj (LitInt 1) :: Closure
+                    unit =
+                        ( rnUnit1
+                            ( "unit myUnit \n" <> "fam AB = A | B\n" <> "rec { let f = let a = A in match a [A ->1, B->2] }"
                             )
                         )
                     expr = Var $ MkVar 0 (mkName "myUnit" "f") simpValInfo

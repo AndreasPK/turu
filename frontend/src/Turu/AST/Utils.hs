@@ -11,6 +11,8 @@ import Turu.AST.Name
 import Data.Set as S
 import Data.String
 
+data Box a = Box ~a
+
 mkIntE :: Int -> Expr a
 mkIntE n = Lit (LitInt n)
 

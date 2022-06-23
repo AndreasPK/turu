@@ -178,6 +178,11 @@ mkConVar _fam_name (ConDef con_name con_tag con_arg_tys) arg_defs = do
     addCon con_name con_def
     return $ con_def
 
+mkValVarRn :: Name -> RnM Var
+mkValVarRn name = do
+    u <- nextUniqueM
+    return $ MkVar u name simpValInfo
+
 rnBinder :: Bind Name -> RnM (Bind Var)
 rnBinder (Bind name rhs) = do
     u <- nextUniqueM
@@ -186,7 +191,11 @@ rnBinder (Bind name rhs) = do
     let v_info = VarInfo rhs_unf
     let var = MkVar u name v_info
     Bind var <$> rnRhs rhs
-rnBinder (RecBinds _) = error "Recursive binds not done"
+rnBinder (RecBinds pairs) = mdo
+    let (names, rhss) = unzip pairs
+    vars <- mapM mkValVarRn names
+    rhss' <- withBinders vars $ mapM rnExpr rhss
+    pure $ RecBinds $ P.zip vars rhss'
 
 rnRhs :: (Expr Name) -> RnM (Expr Var)
 rnRhs = rnExpr
