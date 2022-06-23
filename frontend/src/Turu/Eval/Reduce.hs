@@ -3,15 +3,10 @@
 
 module Turu.Eval.Reduce where
 
-import Turu.Prelude as P
-
-import Turu.AST
-import Turu.AST.Name
-import Turu.Pretty
-
 import Control.Applicative
 import Control.Monad.State.Strict
 import qualified Control.Monad.Trans.State.Strict as TS
+import Data.Bits (Bits (xor))
 import Data.Char
 import Data.Coerce
 import Data.Map.Lazy as M
@@ -20,122 +15,171 @@ import qualified Data.Text as T
 import Debug.Trace
 import GHC.Stack
 import Text.Show.Pretty (ppShow)
+import Turu.AST
+import Turu.AST.Name
 import Turu.AST.Utils
+import Turu.Prelude as P
+import Turu.Pretty
 
 ----------------------------------------
 -------- Book keeping stuff
 ----------------------------------------
 
+jose = error "TODO: Jose"
+
 data EvalState = EvalState
-    { var_heap :: ~(Map Name Closure)
-    , var_cons :: Set Name
-    , var_top :: ~(Map Name Closure)
-    , next_unique :: VUnique
-    -- ^ Sometimes we need to bind a closure to a variable, we use these to make up a name
-    }
+  { var_heap :: ~(Map Name Closure),
+    var_cons :: Set Name,
+    var_top :: ~(Map Name Closure),
+    -- | Sometimes we need to bind a closure to a variable, we use these to make up a name
+    next_unique :: VUnique
+  }
 
 addCon :: Name -> EM ()
 addCon name = do
-    s <- get
-    put $ s{var_cons = S.insert name (var_cons s)}
+  s <- get
+  put $ s {var_cons = S.insert name (var_cons s)}
 
 addTopBind :: Name -> (Expr Var) -> EM ()
 addTopBind name rhs = do
-    s <- get
-    rhs' <- stepExpr 9999 rhs
-    put $ s{var_top = M.insert name rhs' (var_top s), var_heap = M.insert name rhs' (var_heap s)}
+  s <- get
+  rhs' <- stepExpr doNotInd 9999 rhs
+  put $ s {var_top = M.insert name rhs' (var_top s), var_heap = M.insert name rhs' (var_heap s)}
 
 addTopBindsRec :: [(Var, VExpr)] -> EM ()
 addTopBindsRec pairs =
-    mdo
-        let (var_in, rhss_in) = unzip pairs
-        {-
-        if we have
-            rec { let end x = match x [ 0 -> 0, _ -> 1]
-                  let loop x = match x [ 0 -> (end x),
-                                         1 -> (end x),
-                                         _ -> (loop (sub x))]
-                }
-        The usual thing would be to generate two opaque labels for match, and generate the rhss with
-        those labels in scope. We can do so here only if we can create closures for all the rhss without
-        having to look into any other rhs.
+  mdo
+    let (var_in, rhss_in) = unzip pairs
+        var_names = fmap getName var_in
+    let inds = fmap Ind var_names :: [Closure]
 
-        -}
-        -- couldn't get the mdo trick to work here so we do something stupid instead:
-        s <- get
-        let rec_cl_context = var_heap s
-            rec_cl_self = fmap Fun rhss_in
+    rhs_cls <- withVarVals var_names inds $ do
+      mapM (stepExpr doNotInd 9999999) rhss_in :: EM [Closure]
 
-        -- TODO: Not sure if the box/lazy match is required
-        ~rhss <- (withVarVals (fmap getName var_in) rhss $ mapM (stepExpr 9999) rhss_in)
-        zipWithM_ insertClosure var_in rhss
+    let updateInds :: Data -> Data
+    let updateInds m =
+          P.foldl' update m $ zip var_names rhs_cls
+          where
+            update :: Data -> (Name, Closure) -> Data
+            update m (n, cls) = M.insert n cls m
+
+    let rhs_cls' = fmap (flip extendClosureEnv updateInds) rhs_cls
+
+    zipWithM_ insertClosure var_in rhs_cls'
   where
+    -- couldn't get the mdo trick to work here so we do something stupid instead:
+
     insertClosure :: Var -> Closure -> EM ()
     insertClosure name rhs' = do
-        s <- get
-        let name' = getName name
-        put $ s{var_top = M.insert name' rhs' (var_top s), var_heap = M.insert name' rhs' (var_heap s)}
+      s <- get
+      let name' = getName name
+      put $ s {var_top = M.insert name' rhs' (var_top s), var_heap = M.insert name' rhs' (var_heap s)}
+
+    extendClosureEnv :: Closure -> (Data -> Data) -> Closure
+    extendClosureEnv c@Obj {} _ = c
+    extendClosureEnv c@Fun {} _ = c
+    extendClosureEnv c@(SatCon con cls) upd
+      | any isInd cls = SatCon con $ fmap (\c -> extendClosureEnv c upd) cls
+      | otherwise = c
+    extendClosureEnv (FunClosure code cls_env) upd = FunClosure code $ upd cls_env
+    extendClosureEnv Ind {} _ = error "Waht is happening"
 
 -- Only returns a closure for what ocaml calls a "statically constructed expression"
-mkTopClosure :: [Var] -> [Closure] -> Expr Var -> Maybe Closure
-mkTopClosure rec_bnds cls (Lit l) = Obj l
-mkTopClosure rec_bnds cls code@(Var v)
-    | v `P.elem` rec_bnds = error $ "Invalid rec let" <> show code
-    | otherwise = Ind <$> getVal v
-mkTopClosure rec_bnds cls code@(Lam v body) =
-    -- Danger - knot tying
-    FunClosure code <$> (captureFvEnv code <> M.fromList (zip rec_bnds cls))
+-- mkTopClosure :: [Var] -> [Closure] -> Expr Var -> Maybe Closure
+-- mkTopClosure rec_bnds cls (Lit l) = Obj l
+-- mkTopClosure rec_bnds cls code@(Var v)
+--     | v `P.elem` rec_bnds = error $ "Invalid rec let" <> show code
+--     | otherwise = Ind <$> getVal v
+-- mkTopClosure rec_bnds cls code@(Lam v body) =
+--     -- Danger - knot tying
+--     FunClosure code <$> (captureFvEnv code <> M.fromList (zip rec_bnds cls))
 
-mkTopClosure rec_bnds cls code@(Lam v body) =
+-- mkTopClosure rec_bnds cls code@(Lam v body) = undefined
 
+-- ```
+-- letrec a = cons 1 b
+--        b = cons 2 a
+-- ```
 
+-- eval (letrec [(a, cons 1 b), (b, cons 2 a)] body) env =
+-- eval [(a, cons 1 b), (b, cons 2 a)]  = env'
+-- let env' = env <> [(a, Ind 'a'), (b  , Ind 'b')], eval (SatCon "Cons" (Obj 1) b
+--                                                => SatCon Cons eval(Obj1,env') eval(b,env')
+--                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
+--                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
+--                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
+--                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
+--                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
+--                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
+--                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
+--                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
+--                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
 
+-- eval body  env'
+
+-- env' === env <> [(a: Cons 1 'b), (b: Cons 2 'a)]
+-- eval 'b = lookup b
+
+-- a: ConApp Cons 1 'b
+-- let a_cls = SatCon "Cons" (Obj 1) b'
+--     b' = Ind "b"
+
+-- a = FunClosure Code:(\_ -> App 1 b ) Data:env<>[a:Ind a, b:Ind b]
+--    v---------
+
+-- | a|b|cons 1  \|cons 2 /
+--   ^--------------------
 initEvalState :: EvalState
 initEvalState = EvalState mempty mempty mempty 0
 
 newtype EM a = EM (State EvalState a)
-    deriving (Functor, Applicative, Monad, MonadFix)
+  deriving (Functor, Applicative, Monad, MonadFix)
 
 alt_em :: Monad m => m (Maybe a) -> m (Maybe a) -> m (Maybe a)
 alt_em a b = do
-    a' <- a
-    if isJust a'
-        then return a'
-        else b
+  a' <- a
+  if isJust a'
+    then return a'
+    else b
 
 instance MonadState EvalState (EM) where
-    put s = EM $ put s
-    get = EM $ get
+  put s = EM $ put s
+  get = EM $ get
 
 runEM :: EM a -> a
 runEM act = fst $ runState (coerce $ act) (initEvalState)
 
 type Code = Expr Var
+
 type Data = Map Name Closure
 
 data Closure
-    = FunClosure {closure_code :: Code, closure_data :: ~Data}
-    | Fun {closure_code :: Code}
-    | Ind Closure
-    | -- | Objects have no fvs
-      Obj Literal
-    | -- | a fully applied constructor
-      SatCon
-        Var
-        -- ^ The constructor being applied
-        [Closure]
-        -- ^ The arguments to the constructor
-    deriving (Eq, Show)
+  = FunClosure {closure_code :: Code, closure_data :: ~Data}
+  | Fun {closure_code :: Code}
+  | Ind Name
+  | -- | Objects have no fvs
+    Obj Literal
+  | -- | a fully applied constructor
+    SatCon
+      Var
+      -- ^ The constructor being applied
+      [Closure]
+      -- ^ The arguments to the constructor
+  deriving (Eq, Show)
 
 noData :: Data
 noData = mempty
 
 mkTmpVar :: EM Var
 mkTmpVar = do
-    s@EvalState{next_unique} <- get
-    put s{next_unique = next_unique + 1}
-    -- var = !EvalUnit:x_<next_unique>
-    return $ MkVar{v_unique = next_unique, v_name = mkName "!EvalUnit" ("x_" <> T.pack (show next_unique)), v_info = simpValInfo}
+  s@EvalState {next_unique} <- get
+  put s {next_unique = next_unique + 1}
+  -- var = !EvalUnit:x_<next_unique>
+  return $ MkVar {v_unique = next_unique, v_name = mkName "!EvalUnit" ("x_" <> T.pack (show next_unique)), v_info = simpValInfo}
+
+isInd :: Closure -> Bool
+isInd Ind {} = True
+isInd _ = False
 
 ----------------------------------------
 -------- Actual evaluation
@@ -143,23 +187,27 @@ mkTmpVar = do
 
 evalWithUnit :: Expr Var -> CompilationUnit Var -> Closure
 evalWithUnit expr unit = runEM $ do
-    stepWithUnit expr unit
+  stepWithUnit expr unit
 
 evalExpr :: Expr Var -> Closure
 evalExpr expr =
-    let (r, _s) = runState (coerce $ stepExpr 999999 expr) (initEvalState)
-     in r
+  let (r, _s) = runState (coerce $ stepExpr doInd 999999 expr) (initEvalState)
+   in r
+
+doInd = True
+
+doNotInd = False
 
 -- TODO: Closure to expr for testing perhaps?
 --- Closure land starts here
 
 -- TODO
 stepWithUnit :: Expr Var -> CompilationUnit Var -> EM (Closure)
-stepWithUnit expr (Unit{unit_binds, unit_fams}) = do
-    addCons
-    addBinds
+stepWithUnit expr (Unit {unit_binds, unit_fams}) = do
+  addCons
+  addBinds
 
-    stepExpr (P.foldr (\c r -> ord c * r) 1 ("Josè" :: String)) expr
+  stepExpr doInd (P.foldr (\c r -> ord c * r) 1 ("Josè" :: String)) expr
   where
     addCons :: EM ()
     addCons = mapM_ addCon $ fmap getName (concat $ fmap getFamCons unit_fams)
@@ -170,147 +218,162 @@ stepWithUnit expr (Unit{unit_binds, unit_fams}) = do
 
 getVal :: Name -> EM Closure
 getVal name =
-    fromMaybe (error $ show name <> " not in lookup scope")
-        <$> (getHeapVal name `alt_em` getTopVal name)
+  fromMaybe (error $ show name <> " not in lookup scope")
+    <$> (getHeapVal name `alt_em` getTopVal name)
 
 getHeapVal :: HasCallStack => Name -> EM (Maybe Closure)
 getHeapVal name = do
-    s <- get
-    let m = var_heap s
-        v = M.lookup name m
-    return v
+  s <- get
+  let m = var_heap s
+      v = M.lookup name m
+  return v
 
 getTopVal :: Name -> EM (Maybe Closure)
 getTopVal name = do
-    m <- var_top <$> get
-    pure (M.lookup name m)
+  m <- var_top <$> get
+  pure (M.lookup name m)
 
 captureFvEnv :: Expr Var -> EM Data
 captureFvEnv _ = do
-    -- TODO: Only capture free variables
-    var_heap <$> get
+  -- TODO: Only capture free variables
+  var_heap <$> get
 
 -- Run the computation with v = val and restore old state after
 withVarVal :: Name -> Closure -> EM a -> EM a
 withVarVal name val act = do
-    s <- get
-    put $ s{var_heap = M.insert name val (var_heap s)}
-    r <- act
-    put s
-    return r
+  s <- get
+  put $ s {var_heap = M.insert name val (var_heap s)}
+  r <- act
+  put s
+  return r
 
 withVarVals :: [Name] -> [Closure] -> EM a -> EM a
 withVarVals [] [] act = act
 withVarVals (n : ns) (v : vs) act = do
-    withVarVal n v $ withVarVals ns vs act
+  withVarVal n v $ withVarVals ns vs act
 withVarVals _ _ _ = error "withVarVals: missmatched args"
 
-stepExpr :: HasCallStack => Int -> Code -> EM (Closure)
-stepExpr n e
-    | n <= 0 = error $ "TODO:stepExpr 0 " ++ ppShow e
-stepExpr _ e
-    | trace ("stepExpr:" <> ppShow e) False =
-        undefined
-stepExpr _ (Lit l) = return $ Obj $ l
-stepExpr n (App f args) = stepApp n f args
-stepExpr _ (Var v)
-    | isConName (getName v) =
-        pure $
-            if conVarArity v == 0
-                then SatCon v []
-                else Fun $ Var v
-    | otherwise = getVal $ getName v
-stepExpr _ (Lam b rhs) = FunClosure (Lam b rhs) <$> captureFvEnv rhs -- TODO: Without b
-stepExpr n (Let bind body) = evalLet n bind body
-stepExpr n (Match scrut alts) = stepMatch n scrut alts
+stepExpr :: HasCallStack => EvalInd -> Int -> Code -> EM Closure
+stepExpr _ n e
+  | n <= 0 = error $ "TODO:stepExpr 0 " ++ ppShow e
+stepExpr _ _ e
+  | trace ("stepExpr:" <> ppShow e) False =
+      undefined
+stepExpr _ _ (Lit l) = return $ Obj $ l
+stepExpr ind n (App f args) = stepApp ind n f args
+stepExpr _ _ (Var v)
+  | isConName (getName v) =
+      pure $
+        if conVarArity v == 0
+          then SatCon v []
+          else Fun $ Var v
+  | otherwise = getVal $ getName v
+stepExpr _ _ (Lam b rhs) = FunClosure (Lam b rhs) <$> captureFvEnv rhs -- TODO: Without b
+stepExpr ind n (Let bind body) = evalLet ind n bind body
+stepExpr ind n (Match scrut alts) = stepMatch ind n scrut alts
+
+type EvalInd = Bool
 
 -- Args already evaluated, same for the function, just run the function with the given arguments.
-applyClosure :: HasCallStack => Closure -> [Closure] -> EM Closure
-applyClosure c [] = pure c
-applyClosure _c@Obj{} _ = error "Invalid apply to obj"
-applyClosure _c@SatCon{} _ = error "Invalid apply to con"
-applyClosure fun args = do
-    let fn_code = closure_code fun
-    let (arg_bndrs, fn_body) = collectLamBinders fn_code
-        -- arg_count = length args
-        arity = length arg_bndrs
+applyClosure :: HasCallStack => EvalInd -> Closure -> [Closure] -> EM Closure
+applyClosure evalInd c@(Ind v) []
+  | evalInd = getVal (v)
+  | otherwise = pure c
+applyClosure evalInd c@(Ind v) args
+  | evalInd,
+    any isInd args =
+      do
+        let evalIndArg (Ind v) = getVal (v)
+            evalIndArg c = pure c
+        args' <- mapM evalIndArg args
+        c' <- getVal v
+        applyClosure evalInd c' args'
+  | otherwise = pure c
+applyClosure _ c [] = pure c
+applyClosure _ _c@Obj {} _ = error "Invalid apply to obj"
+applyClosure _ _c@SatCon {} _ = error "Invalid apply to con"
+applyClosure evalInd fun args = do
+  let fn_code = closure_code fun
+  let (arg_bndrs, fn_body) = collectLamBinders fn_code
+      -- arg_count = length args
+      arity = length arg_bndrs
 
-    let (used_args, extra_args) = P.splitAt arity args
-    fun' <- withVarVals (fmap getName arg_bndrs) used_args $ stepExpr 9999999 fn_body
-    if P.null extra_args
-        then return fun'
-        else applyClosure fun' extra_args
+  let (used_args, extra_args) = P.splitAt arity args
+  fun' <- withVarVals (fmap getName arg_bndrs) used_args $ stepExpr evalInd 9999999 fn_body
+  if P.null extra_args
+    then return fun'
+    else applyClosure evalInd fun' extra_args
 
 -- Evaluate an expression in a given heap context (contained in the monad)
-stepApp :: HasCallStack => Int -> Code -> [Code] -> EM (Closure)
-stepApp _n f args
-    | trace ("stepApp:" <> ppShow (f, args)) False =
-        undefined
+stepApp :: HasCallStack => EvalInd -> Int -> Code -> [Code] -> EM Closure
+stepApp _ _n f args
+  | trace ("stepApp:" <> ppShow (f, args)) False =
+      undefined
 -- Case1: Constructor applications
-stepApp n c@(Var con) args
-    -- nullary con
-    | isConName (getName con)
-    , P.null (getVarConArgs con) =
-        assert (P.null args) "Nullary constructor applied to args" $
-            return
-                ( SatCon
-                    con
-                    []
-                )
-    | isConName (getName con) =
-        case compare arity (length args) of
-            LT -> error "Oversat con app"
-            EQ -> SatCon con <$> args' -- TODO: Evaluate argS?
-            GT -> do
-                -- Since we don't have PAPs (should we?) the result of a partially applied constructor
-                -- is a function closure with something like FunClosure (\y z-> Con x y z) [x = <closure>]
-                args'' <- args' :: EM [Closure]
-                vars <- replicateM arity (mkTmpVar)
-                let (present_vars, missing_vars) = P.splitAt n_args vars
-                let clo_data = M.fromList $ zip (fmap getName present_vars) args''
+stepApp evalInd n c@(Var con) args
+  -- nullary con
+  | isConName (getName con),
+    P.null (getVarConArgs con) =
+      assert (P.null args) "Nullary constructor applied to args" $
+        return
+          ( SatCon
+              con
+              []
+          )
+  | isConName (getName con) =
+      case compare arity (length args) of
+        LT -> error "Oversat con app"
+        EQ -> SatCon con <$> args' -- TODO: Evaluate argS?
+        GT -> do
+          -- Since we don't have PAPs (should we?) the result of a partially applied constructor
+          -- is a function closure with something like FunClosure (\y z-> Con x y z) [x = <closure>]
+          args'' <- args' :: EM [Closure]
+          vars <- replicateM arity (mkTmpVar)
+          let (present_vars, missing_vars) = P.splitAt n_args vars
+          let clo_data = M.fromList $ zip (fmap getName present_vars) args''
 
-                -- arity > arg_count, the result is a function!
-                return $ FunClosure (mkLams missing_vars (App c $ fmap Var vars)) clo_data
+          -- arity > arg_count, the result is a function!
+          return $ FunClosure (mkLams missing_vars (App c $ fmap Var vars)) clo_data
   where
-    args' = mapM (stepExpr (n - 1)) args
+    args' = mapM (stepExpr evalInd (n - 1)) args
     n_args = length args
     -- n_missing = arity - length args
     arity = length (getVarConArgs con)
 -- Case 2: Atoms - not sure if they actually arise
-stepApp n f [] = stepExpr (n - 1) f
+stepApp evalInd n f [] = stepExpr evalInd (n - 1) f
 -- Case 3: Generic function application
-stepApp n f args = do
-    args' <- mapM (stepExpr 99999999) args
-    f' <- stepExpr (n - 1) f
-    applyClosure f' args'
+stepApp evalInd n f args = do
+  args' <- mapM (stepExpr evalInd 99999999) args
+  f' <- stepExpr evalInd (n - 1) f
+  applyClosure evalInd f' args'
 
-evalLet :: Int -> Bind Var -> Expr Var -> EM Closure
-evalLet _ (RecBinds _binds) _ = error "RecBinds not implemented"
-evalLet n (Bind v rhs) body = do
-    -- Strict language - strict let
-    rhs' <- stepExpr (n - 1) rhs
-    -- TODO: Capture the free vs in a closure
-    withVarVal (getName v) rhs' $ stepExpr (n - 2) body
+evalLet :: EvalInd -> Int -> Bind Var -> Expr Var -> EM Closure
+evalLet ind _ (RecBinds _binds) _ = error "RecBinds not implemented"
+evalLet ind n (Bind v rhs) body = do
+  -- Strict language - strict let
+  rhs' <- stepExpr ind (n - 1) rhs
+  -- TODO: Capture the free vs in a closure
+  withVarVal (getName v) rhs' $ stepExpr ind (n - 2) body
 
-stepMatch :: Int -> Var -> [Alt Var] -> EM Closure
-stepMatch _n _scrut [] = error "match without alts"
-stepMatch n scrut alts = do
-    scrut_val <- getVal (getName scrut)
-    selectAlt scrut_val
+stepMatch :: EvalInd -> Int -> Var -> [Alt Var] -> EM Closure
+stepMatch _ _n _scrut [] = error "match without alts"
+stepMatch evalInd n scrut alts = do
+  scrut_val <- getVal (getName scrut)
+  selectAlt scrut_val
   where
     selectAlt :: Closure -> EM Closure
     selectAlt (Obj l) = do
-        let rhss = [rhs | LitAlt alt_lit rhs <- alts, l == alt_lit] ++ [rhs | WildAlt rhs <- alts]
-        if P.null rhss
-            then error "stepMatch - no alt found"
-            else stepExpr (n - 1) $ head rhss
+      let rhss = [rhs | LitAlt alt_lit rhs <- alts, l == alt_lit] ++ [rhs | WildAlt rhs <- alts]
+      if P.null rhss
+        then error "stepMatch - no alt found"
+        else stepExpr evalInd (n - 1) $ head rhss
     -- TODO: Probably also needs closure captures treament
     selectAlt (SatCon con args)
-        | isConName (getName con)
-        , ((rhs, bndrs) : _) <- [(rhs, bndrs) | ConAlt alt_con bndrs rhs <- alts, getName con == getName alt_con] =
-            withVarVals (fmap getName bndrs) args $ stepExpr (n - 1) rhs
+      | isConName (getName con),
+        ((rhs, bndrs) : _) <- [(rhs, bndrs) | ConAlt alt_con bndrs rhs <- alts, getName con == getName alt_con] =
+          withVarVals (fmap getName bndrs) args $ stepExpr evalInd (n - 1) rhs
     selectAlt scrut_val
-        -- TODO: Chould check argument is actually a value here
-        | (rhs : _) <- [rhs | WildAlt rhs <- alts] =
-            stepExpr (n - 1) rhs
-        | otherwise = error $ "No matching alts:\n" <> ppShow scrut_val <> "\n" <> ppShow alts
+      -- TODO: Chould check argument is actually a value here
+      | (rhs : _) <- [rhs | WildAlt rhs <- alts] =
+          stepExpr evalInd (n - 1) rhs
+      | otherwise = error $ "No matching alts:\n" <> ppShow scrut_val <> "\n" <> ppShow alts

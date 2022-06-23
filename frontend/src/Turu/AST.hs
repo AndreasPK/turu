@@ -153,7 +153,7 @@ instance (Printable a, Show a) => Printable (FamDef a) where
 getFamCons :: FamDef i -> [ConDef i]
 getFamCons = fd_cons
 
-    data ConDef identifier = ConDef {cd_var :: ~identifier, cd_tag :: Tag, cd_args :: ~[identifier]}
+data ConDef identifier = ConDef {cd_var :: ~identifier, cd_tag :: Tag, cd_args :: ~[identifier]}
     deriving (Eq, Show)
 
 instance (Printable a, Show a) => Printable (ConDef a) where
