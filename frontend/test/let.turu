@@ -1,0 +1,13 @@
+unit testlist
+
+fam Nat = Zero | Succ Nat
+
+fam Int = P Nat | N Nat
+
+let zero = Zero
+let one = (Succ Zero)
+let two = Succ (Succ Zero)
+
+let main unused =
+    let x = (Succ two)
+    in x

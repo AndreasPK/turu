@@ -1,0 +1,10 @@
+unit testlist
+
+fam AB = A | B
+fam L = N | C AB L
+
+let list = (C B (C A N))
+
+let head x = match x [ C h z -> h]
+
+let main unused = head list

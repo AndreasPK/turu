@@ -5,11 +5,13 @@ module Turu.Prelude (
     module Data.Maybe,
     module Turu.Pretty,
     assert,
+    module S,
 ) where
 
 import Data.Foldable
 import Data.Maybe
 import Data.Text (Text, pack, unpack)
+import GHC.Stack.Types as S (HasCallStack)
 import Prelude
 
 import Turu.Pretty (Printable (..))

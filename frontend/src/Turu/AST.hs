@@ -4,7 +4,7 @@
 
 module Turu.AST where
 
-import Turu.Prelude
+import Turu.Prelude as P
 
 import Turu.AST.Name
 import Turu.Pretty
@@ -12,6 +12,7 @@ import Turu.Pretty
 import Data.Hashable
 import Data.String
 import Data.Text
+import qualified Data.Text as T
 import GHC.TypeLits
 import Text.Show.Pretty hiding (Name)
 
@@ -24,6 +25,7 @@ data VarType
     | Id
 
 type Tag = Int
+type Arity = Int
 
 {- Constructors and vars
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -55,11 +57,23 @@ instance Printable Var where
 instance HasName Var where
     getName v = v_name v
 
-getVarConArgs :: Var -> Maybe [FamDef Var]
-getVarConArgs (MkVar{v_info})
+getVarConArgs :: HasCallStack => Var -> [FamDef Var]
+getVarConArgs v@(MkVar{v_info})
     | FamConInfo{info_con} <- v_info =
-        Just $ c_fields info_con
+        c_fields info_con
+    | otherwise = error $ "Not a con:" <> ppShow v
+
+getVarCon :: Var -> Maybe DataCon
+getVarCon var
+    | FamConInfo{info_con} <- v_info var =
+        Just info_con
     | otherwise = Nothing
+
+getConArity :: DataCon -> Arity
+getConArity con = P.length $ c_fields con
+
+conVarArity :: Var -> Int
+conVarArity v = maybe (error "conVarArity") getConArity (getVarCon v)
 
 mkValVar :: VUnique -> Text -> UnitName -> Var
 mkValVar u n unit = MkVar{v_unique = u, v_name = mkName unit n, v_info = simpValInfo}
@@ -84,6 +98,8 @@ instance Show IdInfo where
     show _var@VarInfo{} = "VarInfo{}"
     show _var@FamConInfo{} = "FamConInfo{}"
 
+-- show var@FamConInfo{} = "FamConInfo{info_con = " <> ppShow (info_con var) <> "}"
+
 instance Printable (IdInfo) where
     ppr = ppDoc
 
@@ -103,7 +119,12 @@ data DataCon
         , c_fields :: ~[FamDef Var]
         -- ^ Always empty I guess
         }
-    deriving (Show)
+
+instance Show DataCon where
+    show con = show (c_name con) <> "[" <> sort con <> "," <> ppShow (fmap (v_name . fd_var) $ c_fields con) <> "]"
+      where
+        sort DataCon{} = "D"
+        sort FamCon{} = "F"
 
 instance Printable (DataCon) where
     ppr = ppDoc

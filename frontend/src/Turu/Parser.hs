@@ -114,32 +114,32 @@ alt = lit '->' expr
 -}
 
 data ParseInfo = ParseInfo
-  { pi_unit :: (Maybe UnitName),
-    pi_binds :: ~[Bind Text],
-    pi_uniq :: Int
-  }
+    { pi_unit :: (Maybe UnitName)
+    , pi_binds :: ~[Bind Text]
+    , pi_uniq :: Int
+    }
 
 initParseInfo :: ParseInfo
 initParseInfo = ParseInfo (Nothing) [] 0
 
 data ErrorInfo = ErrorInfo
-  deriving (Eq, Ord, Show) -- For now :(
+    deriving (Eq, Ord, Show) -- For now :(
 
 instance ShowErrorComponent ErrorInfo where
-  showErrorComponent (ErrorInfo) = ""
-  errorComponentLen (ErrorInfo) = 0
+    showErrorComponent (ErrorInfo) = ""
+    errorComponentLen (ErrorInfo) = 0
 
 type TParseMonad = ST.State ParseInfo
 
 getUnit :: P (Maybe UnitName)
 getUnit = do
-  s <- MTLS.get
-  return $ pi_unit s
+    s <- MTLS.get
+    return $ pi_unit s
 
 setUnit :: Maybe UnitName -> P ()
 setUnit unit1 = do
-  s <- MTLS.get
-  MTLS.put $ s {pi_unit = unit1}
+    s <- MTLS.get
+    MTLS.put $ s{pi_unit = unit1}
 
 type P a = ParsecT ErrorInfo Text TParseMonad a
 
@@ -147,27 +147,27 @@ type PState = M.State Text ErrorInfo
 
 initParseState :: Text -> State Text ErrorInfo
 initParseState input =
-  let posState = PosState input 0 (initialPos "NoFile") (mkPos 0) ""
-   in State input 0 posState []
+    let posState = PosState input 0 (initialPos "NoFile") (mkPos 0) ""
+     in State input 0 posState []
 
 runParserStateM :: Text -> P a -> TParseMonad (PState, Either (ParseErrorBundle Text ErrorInfo) a)
 runParserStateM input parser =
-  let pstate = initParseState input :: PState
-   in runParserT' parser pstate
+    let pstate = initParseState input :: PState
+     in runParserT' parser pstate
 
 runParser :: Text -> P a -> Maybe a
 runParser input parser =
-  let (parse_result, _state') = runState (runParserStateM input parser) initParseInfo
-      (parse_state, parsed_val) = parse_result
-      remainder = stateInput parse_state
-   in if T.null remainder
-        then either (error . show) Just parsed_val
-        else traceShow remainder $ either (error . show) Just parsed_val
+    let (parse_result, _state') = runState (runParserStateM input parser) initParseInfo
+        (parse_state, parsed_val) = parse_result
+        remainder = stateInput parse_state
+     in if T.null remainder
+            then either (error . show) Just parsed_val
+            else traceShow remainder $ either (error . show) Just parsed_val
 
 parseFile :: FilePath -> IO (Maybe (CompilationUnit Name))
 parseFile file = do
-  contents <- T.readFile file
-  return $ Turu.Parser.runParser contents unit
+    contents <- T.readFile file
+    return $ Turu.Parser.runParser contents unit
 
 -- Actual parsers
 
@@ -197,23 +197,23 @@ key word = (string word *> notFollowedBy alphaNumChar) <* space
 
 nameText :: P Text
 nameText = do
-  c <- lowerChar
-  r <- many (alphaNumChar <|> char '_') :: P String
-  space
-  let n = pack (c : r)
-  if n `P.elem` keywords
-    then M.failure (Just $ Tokens $ NE.fromList $ T.unpack n) (S.singleton $ Label $ NE.fromList "identifier")
-    else return n
+    c <- lowerChar
+    r <- many (alphaNumChar <|> char '_' <|> char '\'') :: P String
+    space
+    let n = pack (c : r)
+    if n `P.elem` keywords
+        then M.failure (Just $ Tokens $ NE.fromList $ T.unpack n) (S.singleton $ Label $ NE.fromList "identifier")
+        else return n
 
 name :: P Name
 name = Name <$> nameText <*> getUnit
 
 unitDef :: P UnitName
 unitDef = do
-  unit_str <- lex (tokens (==) "unit") *> lex nameText
-  let unit_name = UnitName unit_str
-  setUnit $ Just unit_name
-  return unit_name
+    unit_str <- lex (tokens (==) "unit") *> lex nameText
+    let unit_name = UnitName unit_str
+    setUnit $ Just unit_name
+    return unit_name
 
 defs :: P [Either (Bind Name) (FamDef Name)]
 defs = many def
@@ -223,10 +223,10 @@ def = (Right <$> try famDef) <|> (Left <$> try bind)
 
 unit :: P (CompilationUnit Name)
 unit = do
-  n <- unitDef
-  (bs, fams) <- partitionEithers <$> defs
-  void eof
-  return $ Unit n bs fams
+    n <- unitDef
+    (bs, fams) <- partitionEithers <$> defs
+    void eof
+    return $ Unit n bs fams
 
 number :: P Int
 number = lex $ L.signed mempty L.decimal
@@ -242,50 +242,51 @@ aright = void $ sym "->"
 
 famDef :: P (FamDef Name)
 famDef = do
-  key "fam"
-  fam_name <- conNameP
-  _ <- sym "="
-  con_defs <- consList 0
-  return $ FamDef fam_name con_defs
+    key "fam"
+    fam_name <- conNameP
+    _ <- sym "="
+    con_defs <- consList 0
+    return $ FamDef fam_name con_defs
 
 -- True | False | Either
 consList :: Int -> P [ConDef Name]
 consList tag = do
-  con1 <- try $ consDef tag
-  constrs <- try ((sym "|" *> (consList (tag + 1)) <|> pure []))
-  return $ con1 : constrs
+    con1 <- try $ consDef tag
+    constrs <- try ((sym "|" *> (consList (tag + 1)) <|> pure []))
+    return $ con1 : constrs
 
 consDef :: Int -> P (ConDef Name)
 consDef tag = do
-  con_name <- conNameP
-  con_args <- many conNameP
-  return $ ConDef con_name tag con_args
+    con_name <- conNameP
+    con_args <- many conNameP
+    return $ ConDef con_name tag con_args
 
 bind :: P (Bind Name)
 bind = rec_bind <|> (uncurry Bind) <$> bind1
 
 rec_bind :: P (Bind Name)
 rec_bind = do
-  void $ key "rec" *> sym "{"
-  binds <- manyTill bind1 (sym "}")
-  return $ RecBinds binds
+    void $ key "rec" *> sym "{"
+    binds <- manyTill bind1 (sym "}")
+    return $ RecBinds binds
 
 bind1 :: P (Name, Expr Name)
 bind1 = do
-  key "let"
-  n <- name
-  args <- many name
-  _ <- sym "="
-  e <- expr
-  return $ (n, (mkLams args e))
+    key "let"
+    n <- name
+    args <- many name
+    _ <- sym "="
+    -- Not sure if using expr1 here is save
+    e <- expr1
+    return $ (n, (mkLams args e))
 
 type ExprP = P (Expr Name)
 
 -- expression with or without parens
 expr :: ExprP
-expr = try (pleft *> expr1 <* pright) <|> try var <|> try con <|> try lit <|> try letp <|> try match
+expr = try var <|> try con <|> try lit <|> try letp <|> try match <|> try (between pleft pright expr1)
 
--- subexpression, only used where no parens can appear
+-- subexpression, without required parens
 expr1 :: ExprP
 expr1 = try app <|> try lam <|> expr
 
@@ -304,21 +305,21 @@ clit = LitChar <$> between (char '\'') (char '\'') anySingle
 
 letp :: ExprP
 letp = do
-  key "let"
-  n <- name
-  args <- many name
-  _ <- sym "="
-  rhs <- expr
-  key "in"
-  body <- expr
-  return $ Let (Bind n $ mkLams args rhs) body
+    key "let"
+    n <- name
+    args <- many name
+    _ <- sym "="
+    rhs <- expr1
+    key "in"
+    body <- expr1
+    return $ Let (Bind n $ mkLams args rhs) body
 
 conNameP :: P Name
 conNameP = do
-  c <- upperChar
-  cs <- lex $ takeWhileP Nothing (isAlphaNum)
-  let conName = c `cons` cs
-  Name conName <$> (getUnit)
+    c <- upperChar
+    cs <- lex $ takeWhileP Nothing (isAlphaNum)
+    let conName = c `cons` cs
+    Name conName <$> (getUnit)
 
 lam :: ExprP
 lam = Lam <$> (sym "\\" *> name) <*> (aright *> expr)
@@ -332,9 +333,9 @@ con = Var <$> conNameP
 -- In order to make up work without parens we need to make it right(?)-recursive. I can't be bothered atm.
 app :: ExprP
 app = do
-  f <- expr
-  args <- some expr
-  return $ App f args
+    f <- expr
+    args <- some expr
+    return $ App f args
 
 match :: ExprP
 match = Match <$> (key "match" *> name) <*> match_body

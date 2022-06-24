@@ -1,13 +1,16 @@
-module Main where
+module TestFile where
+
+-- import Test.Tasty.QuickCheck as QC
+-- import Test.Tasty.SmallCheck as SC
 
 import Data.List
 import Data.Ord
 import GHC.IO
-import System.Environment
+import System.FilePath
+import Test.Tasty
+import Test.Tasty.HUnit
 import Text.Megaparsec.Debug (dbg)
 import Text.Show.Pretty hiding (Name)
-
-import qualified Data.Text as T
 import Turu.AST
 import Turu.AST.Name
 import Turu.AST.Rename as R
@@ -28,16 +31,19 @@ parseRenameFile file = unsafePerformIO $ do
     let renamed = renameUnit <$> parsed
     pure $ fromMaybe (error $ "Failed to parse or rename:" <> file) renamed
 
-parse :: a
-parse = undefined
-
-main :: IO ()
-main = do
-    args <- getArgs
-    if null args
-        then putStrLn "No args"
+checkOutput :: FilePath -> IO Bool
+checkOutput fp = do
+    let src = fp </> ".turu"
+        out = fp </> ".out"
+        unit = parseRenameFile src
+        result = evalMain unit
+    output <- readFile out
+    if output == ppShow result
+        then pure True
         else do
-            let file = head args
-            let bind_name = if length args < 2 then "main" else args !! 2
-            let unit = parseRenameFile file
-            print $ evalBind (T.pack bind_name) unit
+            putStrLn $ "Missmatched output for " <> fp
+            putStrLn "Expected:"
+            putStrLn $ ppShow output
+            putStrLn "Actual:"
+            putStrLn $ ppShow result
+            return False

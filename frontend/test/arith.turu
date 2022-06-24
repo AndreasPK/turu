@@ -1,0 +1,30 @@
+unit testlist
+
+fam Nat = Zero | Succ Nat
+
+fam Int = P Nat | N Nat
+
+let zero = (Zero)
+let one = (Succ Zero)
+
+fam FUnit = Unit
+fam Bool = True | False
+fam Ord = LT | EQ | GT
+
+fam List = Nil | Cons Any L
+
+let head x = (match x [ Cons x z -> x])
+let cons x y = (Cons x y)
+rec {
+    let addNat x y = (match x
+        [ Zero -> y
+        , Succ x' -> addNat x' (Succ y)])
+
+    let compareNat x y = (match x
+        [ Zero -> (match y [Zero -> EQ, _ -> LT])
+        , Succ x -> (match y [Zero -> GT, Succ y -> compareNat x y])
+
+        ])
+    }
+
+let main unused = compareNat (addNat one one) one

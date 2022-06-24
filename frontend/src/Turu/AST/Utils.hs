@@ -37,11 +37,6 @@ collectLamBinders e = go [] e
 instance IsString (Expr Name) where
     fromString s = Var $ Name (fromString s) Nothing
 
-------------
-
-conVarArity :: Var -> Int
-conVarArity v = maybe (error "conVarArity") length (getVarConArgs v)
-
 -----------
 freeVarsExpr :: Ord a => Expr a -> Set a
 freeVarsExpr e =
