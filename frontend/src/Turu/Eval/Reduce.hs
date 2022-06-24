@@ -185,6 +185,18 @@ isInd _ = False
 -------- Actual evaluation
 ----------------------------------------
 
+evalMain :: CompilationUnit Var -> Either Text Closure
+evalMain unit@Unit {unit_binds = binds} =
+  let mains = [(v, main) | Bind (v@MkVar {v_name}) main <- binds, n_name v_name == "main"]
+   in if P.null mains
+        then Left "main function not found"
+        else
+          let (v_main, main_rhs) = head mains
+              (arg_bndrs, main_body) = collectLamBinders main_rhs
+              arity = length arg_bndrs
+              eval_expr = App main_rhs $ replicate arity (Lit $ LitInt 0)
+           in Right $ evalWithUnit eval_expr unit
+
 evalWithUnit :: Expr Var -> CompilationUnit Var -> Closure
 evalWithUnit expr unit = runEM $ do
   stepWithUnit expr unit
@@ -256,9 +268,9 @@ withVarVals _ _ _ = error "withVarVals: missmatched args"
 stepExpr :: HasCallStack => EvalInd -> Int -> Code -> EM Closure
 stepExpr _ n e
   | n <= 0 = error $ "TODO:stepExpr 0 " ++ ppShow e
-stepExpr _ _ e
-  | trace ("stepExpr:" <> ppShow e) False =
-      undefined
+-- stepExpr _ _ e
+--   | trace ("stepExpr:" <> ppShow e) False =
+--       undefined
 stepExpr _ _ (Lit l) = return $ Obj $ l
 stepExpr ind n (App f args) = stepApp ind n f args
 stepExpr _ _ (Var v)
@@ -306,9 +318,9 @@ applyClosure evalInd fun args = do
 
 -- Evaluate an expression in a given heap context (contained in the monad)
 stepApp :: HasCallStack => EvalInd -> Int -> Code -> [Code] -> EM Closure
-stepApp _ _n f args
-  | trace ("stepApp:" <> ppShow (f, args)) False =
-      undefined
+-- stepApp _ _n f args
+--   | trace ("stepApp:" <> ppShow (f, args)) False =
+--       undefined
 -- Case1: Constructor applications
 stepApp evalInd n c@(Var con) args
   -- nullary con
@@ -322,7 +334,7 @@ stepApp evalInd n c@(Var con) args
           )
   | isConName (getName con) =
       case compare arity (length args) of
-        LT -> error "Oversat con app"
+        LT -> error $ "Oversat con app" <> (ppShow (arity, length args, con, args))
         EQ -> SatCon con <$> args' -- TODO: Evaluate argS?
         GT -> do
           -- Since we don't have PAPs (should we?) the result of a partially applied constructor
