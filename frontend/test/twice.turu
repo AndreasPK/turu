@@ -1,0 +1,15 @@
+unit testrecfun
+
+fam AB = A | B
+
+let not x = match x [1 -> 0, 0 -> 1]
+
+rec { 
+    let twice n x =
+            match n
+            [ 0 -> x
+            , 1 -> not x
+            , 2 -> (twice 1 x)]
+    }
+
+let main unused = (twice 2 1)

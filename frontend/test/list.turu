@@ -1,0 +1,6 @@
+unit testlist
+
+fam AB = A | B
+fam L = N | C AB L
+
+let main unused = (C B (C A N))
