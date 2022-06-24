@@ -46,7 +46,10 @@ unitTests =
                  in runParser "(a b)" P.expr @?= Just result
             , testCase "match" $
                 let result = Match "s" [ConAlt "Con" ["x", "y"] "x"] :: Expr Name
-                 in runParser "match s [Con x y -> x]" P.expr @?= Just result
+                 in runParser "match s [Con x y -> x]" P.match @?= Just result
+            , testCase "match-expr" $
+                let result = Match "s" [ConAlt "Con" ["x", "y"] "x"] :: Expr Name
+                 in runParser "match s [Con x y -> x]" (dbg "" P.expr) @?= Just result
             , testCase "bind" $
                 let result = Bind "f" (Lam "x" "x") :: Bind Name
                  in runParser "let f x = x" P.bind @?= Just result

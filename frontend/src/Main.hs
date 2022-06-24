@@ -39,5 +39,5 @@ main = do
         else do
             let file = head args
             let bind_name = if length args < 2 then "main" else args !! 2
-            let unit = parseRenameFile file
-            print $ evalBind (T.pack bind_name) unit
+            let main_unit = parseRenameFile file
+            print $ evalBind (T.pack bind_name) main_unit

@@ -55,5 +55,7 @@ let main unused =
     (
         let four = addNat two two
         in
-        fib four
+        let eight = addNat four four
+        in
+        fib (addNat eight eight)
     )

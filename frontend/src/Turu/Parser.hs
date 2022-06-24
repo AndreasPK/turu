@@ -25,6 +25,15 @@ import Turu.AST.Utils
 import Turu.Prelude as P hiding (lex, takeWhile)
 
 {-
+
+--------------------------
+------ imports
+--------------------------
+
+import <unitName>
+
+------------------------
+
 We want to rely on parantheses quite a lot for a start. A fully formed unit would look something like:
 
 unit Fib -- This is a comment - unit <Name> starts a new compilation unit.
@@ -195,22 +204,47 @@ sym = L.symbol space
 key :: Text -> P ()
 key word = (string word *> notFollowedBy alphaNumChar) <* space
 
-nameText :: P Text
-nameText = do
+-- | parse identifier without consuming space
+identifier :: P Text
+identifier = do
     c <- lowerChar
     r <- many (alphaNumChar <|> char '_' <|> char '\'') :: P String
-    space
     let n = pack (c : r)
     if n `P.elem` keywords
         then M.failure (Just $ Tokens $ NE.fromList $ T.unpack n) (S.singleton $ Label $ NE.fromList "identifier")
         else return n
 
-name :: P Name
-name = Name <$> nameText <*> getUnit
+-- | parse identifier without consuming space
+conIdentifier :: P Text
+conIdentifier = do
+    c <- upperChar
+    cs <- lex $ takeWhileP Nothing (isAlphaNum)
+    let conName = c `cons` cs
+    return conName
+
+modulePrefix :: P UnitName
+modulePrefix = UnitName <$> identifier <* char '.'
+
+name :: P Text -> P Name
+name name_kind =
+    try
+        ( do
+            u <- modulePrefix
+            n <- name_kind <* space
+            pure (Name n (Just u))
+        )
+        <|> Name <$> (name_kind <* space) <*> getUnit
+
+valName :: P Name
+valName = name identifier
+
+conNameP :: P Name
+conNameP = do
+    name conIdentifier
 
 unitDef :: P UnitName
 unitDef = do
-    unit_str <- lex (tokens (==) "unit") *> lex nameText
+    unit_str <- lex (tokens (==) "unit") *> lex identifier
     let unit_name = UnitName unit_str
     setUnit $ Just unit_name
     return unit_name
@@ -273,8 +307,8 @@ rec_bind = do
 bind1 :: P (Name, Expr Name)
 bind1 = do
     key "let"
-    n <- name
-    args <- many name
+    n <- valName
+    args <- many valName
     _ <- sym "="
     -- Not sure if using expr1 here is save
     e <- expr1
@@ -306,26 +340,19 @@ clit = LitChar <$> between (char '\'') (char '\'') anySingle
 letp :: ExprP
 letp = do
     key "let"
-    n <- name
-    args <- many name
+    n <- valName
+    args <- many valName
     _ <- sym "="
     rhs <- expr1
     key "in"
     body <- expr1
     return $ Let (Bind n $ mkLams args rhs) body
 
-conNameP :: P Name
-conNameP = do
-    c <- upperChar
-    cs <- lex $ takeWhileP Nothing (isAlphaNum)
-    let conName = c `cons` cs
-    Name conName <$> (getUnit)
-
 lam :: ExprP
-lam = Lam <$> (sym "\\" *> name) <*> (aright *> expr)
+lam = Lam <$> (sym "\\" *> valName) <*> (aright *> expr)
 
 var :: ExprP
-var = Var <$> name
+var = Var <$> valName
 
 con :: ExprP
 con = Var <$> conNameP
@@ -338,7 +365,7 @@ app = do
     return $ App f args
 
 match :: ExprP
-match = Match <$> (key "match" *> name) <*> match_body
+match = Match <$> (key "match" *> valName) <*> match_body
 
 match_body :: P [Alt Name]
 match_body = between (sym "[") (sym "]") alts <* space
@@ -353,7 +380,7 @@ alt = litAlt <|> conAlt <|> wildAlt
 
 litAlt, conAlt, wildAlt :: AltP
 litAlt = LitAlt <$> (lit1 <* aright) <*> expr1
-conAlt = ConAlt <$> conNameP <*> many name <*> (aright *> expr1)
+conAlt = ConAlt <$> conNameP <*> many valName <*> (aright *> expr1)
 wildAlt = WildAlt <$> (sym "_" *> aright *> expr1)
 
 -- name :: P Name
