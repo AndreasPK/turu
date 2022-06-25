@@ -6,6 +6,7 @@ module Turu.Prelude (
     module Turu.Pretty,
     assert,
     module S,
+    debugIsOn,
 ) where
 
 import Data.Foldable
@@ -18,3 +19,6 @@ import Turu.Pretty (Printable (..))
 
 assert :: Bool -> [Char] -> a -> a
 assert b msg = if not b then error msg else id
+
+debugIsOn :: Bool
+debugIsOn = False

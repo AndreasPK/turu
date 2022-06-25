@@ -14,10 +14,17 @@ import Turu.AST
 import Turu.AST.Name
 import Turu.AST.Rename as R
 import Turu.Eval.Reduce as Eval
+import Turu.Eval.Types as Eval
 import Turu.Parser as P
 import Turu.Prelude
 
-main = defaultMain tests
+import TestExamples
+import qualified Turu.Builtins as Builtin
+
+main :: IO ()
+main = do
+    file_tests <- fileTests
+    defaultMain $ testGroup "Tests" [unitTests, file_tests]
 
 tests :: TestTree
 tests = testGroup "Tests" [unitTests]
@@ -49,13 +56,13 @@ unitTests =
                  in runParser "match s [Con x y -> x]" P.match @?= Just result
             , testCase "match-expr" $
                 let result = Match "s" [ConAlt "Con" ["x", "y"] "x"] :: Expr Name
-                 in runParser "match s [Con x y -> x]" (dbg "" P.expr) @?= Just result
+                 in runParser "match s [Con x y -> x]" (P.expr) @?= Just result
             , testCase "bind" $
                 let result = Bind "f" (Lam "x" "x") :: Bind Name
                  in runParser "let f x = x" P.bind @?= Just result
             , testCase "rec-bind" $
                 let result = RecBinds [("f", (Lam "x" "x"))] :: Bind Name
-                 in runParser "rec { let f x = x }" (dbg "" P.bind) @?= Just result
+                 in runParser "rec { let f x = x }" (P.bind) @?= Just result
             , testCase "let" $
                 let result = Let (Bind "f" (Lam "x" "x")) (App "f" ["y"]) :: Expr Name
                  in runParser "let f x = x in (f y)" P.expr @?= Just result
@@ -77,6 +84,10 @@ unitTests =
             , testCase "conDef - maybe" $
                 let result = FamDef "Maybe" [ConDef "Just" 0 ["Any"], ConDef "Nothing" 1 []]
                  in runParser "fam Maybe = Just Any | Nothing" P.famDef @?= Just result
+            , -- Builtin renaming
+              testCase "rename builtin" $
+                let result = Var Builtin.addIntVar
+                 in rnExpr1 "builtin.addInt" @?= result
             ]
         , testGroup
             "Eval tests"
@@ -97,6 +108,15 @@ unitTests =
                     unit =
                         ( rnUnit1
                             ( "unit myUnit \n" <> "fam AB = A | B\n" <> "rec { let f = let a = A in match a [A ->1, B->2] }"
+                            )
+                        )
+                    expr = Var $ MkVar 0 (mkName "myUnit" "f") simpValInfo
+                 in (evalWithUnit expr unit) @?= result
+            , testCase "addInt" $
+                let result = Obj (LitInt 3) :: Closure
+                    unit =
+                        ( rnUnit1
+                            ( "unit myUnit \n" <> "fam AB = A | B\n" <> "rec { let f = addInt 1 2 }"
                             )
                         )
                     expr = Var $ MkVar 0 (mkName "myUnit" "f") simpValInfo

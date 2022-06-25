@@ -18,6 +18,8 @@ import Text.Show.Pretty (ppShow)
 import Turu.AST
 import Turu.AST.Name
 import Turu.AST.Utils
+import Turu.Eval.Builtins (evalBuiltin)
+import Turu.Eval.Types
 import Turu.Prelude as P
 import Turu.Pretty
 
@@ -85,49 +87,6 @@ addTopBindsRec pairs =
     extendClosureEnv (FunClosure code cls_env) upd = FunClosure code $ upd cls_env
     extendClosureEnv Ind{} _ = error "Waht is happening"
 
--- Only returns a closure for what ocaml calls a "statically constructed expression"
--- mkTopClosure :: [Var] -> [Closure] -> Expr Var -> Maybe Closure
--- mkTopClosure rec_bnds cls (Lit l) = Obj l
--- mkTopClosure rec_bnds cls code@(Var v)
---     | v `P.elem` rec_bnds = error $ "Invalid rec let" <> show code
---     | otherwise = Ind <$> getVal v
--- mkTopClosure rec_bnds cls code@(Lam v body) =
---     -- Danger - knot tying
---     FunClosure code <$> (captureFvEnv code <> M.fromList (zip rec_bnds cls))
-
--- mkTopClosure rec_bnds cls code@(Lam v body) = undefined
-
--- ```
--- letrec a = cons 1 b
---        b = cons 2 a
--- ```
-
--- eval (letrec [(a, cons 1 b), (b, cons 2 a)] body) env =
--- eval [(a, cons 1 b), (b, cons 2 a)]  = env'
--- let env' = env <> [(a, Ind 'a'), (b  , Ind 'b')], eval (SatCon "Cons" (Obj 1) b
---                                                => SatCon Cons eval(Obj1,env') eval(b,env')
---                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
---                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
---                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
---                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
---                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
---                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
---                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
---                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
---                                                => SatCon Cons (Obj 1) (eval (Ind b) env')
-
--- eval body  env'
-
--- env' === env <> [(a: Cons 1 'b), (b: Cons 2 'a)]
--- eval 'b = lookup b
-
--- a: ConApp Cons 1 'b
--- let a_cls = SatCon "Cons" (Obj 1) b'
---     b' = Ind "b"
-
--- a = FunClosure Code:(\_ -> App 1 b ) Data:env<>[a:Ind a, b:Ind b]
---    v---------
-
 {- | a|b|cons 1  \|cons 2 /
    ^--------------------
 -}
@@ -150,24 +109,6 @@ instance MonadState EvalState (EM) where
 
 runEM :: EM a -> a
 runEM act = fst $ runState (coerce $ act) (initEvalState)
-
-type Code = Expr Var
-
-type Data = Map Name Closure
-
-data Closure
-    = FunClosure {closure_code :: Code, closure_data :: ~Data}
-    | Fun {closure_code :: Code}
-    | Ind Name
-    | -- | Objects have no fvs
-      Obj Literal
-    | -- | a fully applied constructor
-      SatCon
-        Var
-        -- ^ The constructor being applied
-        [Closure]
-        -- ^ The arguments to the constructor
-    deriving (Eq, Show)
 
 noData :: Data
 noData = mempty
@@ -245,9 +186,11 @@ stepWithUnit expr (Unit{unit_binds, unit_fams}) = do
     addBind (RecBinds pairs) = addTopBindsRec pairs
 
 getVal :: Name -> EM Closure
-getVal name =
-    fromMaybe (error $ show name <> " not in lookup scope")
-        <$> (getHeapVal name `alt_em` getTopVal name)
+getVal name
+    | isBuiltinName name = pure $ Builtin name
+    | otherwise =
+        fromMaybe (error $ show name <> " not in lookup scope")
+            <$> (getHeapVal name `alt_em` getTopVal name)
 
 getHeapVal :: HasCallStack => Name -> EM (Maybe Closure)
 getHeapVal name = do
@@ -304,6 +247,7 @@ type EvalInd = Bool
 
 -- Args already evaluated, same for the function, just run the function with the given arguments.
 applyClosure :: HasCallStack => EvalInd -> Closure -> [Closure] -> EM Closure
+applyClosure _ c@(Builtin op) args = pure $ evalBuiltin op args
 applyClosure evalInd c@(Ind v) []
     | evalInd = getVal (v)
     | otherwise = pure c

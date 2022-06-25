@@ -14,7 +14,10 @@ import GHC.Generics
 newtype UnitName = UnitName {un_name :: Text} deriving (Eq, Ord, Hashable, Show, IsString)
 
 instance Printable UnitName where
-    ppr (UnitName n) = text $ show n
+    ppr (UnitName n) = text $ T.unpack n
+
+builtinUnitName :: UnitName
+builtinUnitName = UnitName "builtin"
 
 data Name = Name
     { n_name :: Text
@@ -51,6 +54,9 @@ mkName unit n = Name n $ Just unit
 
 isConName :: Name -> Bool
 isConName name = isUpper $ T.head (n_name name)
+
+isBuiltinName :: Name -> Bool
+isBuiltinName n = n_unit n == Just builtinUnitName
 
 ------------ HasName utility class -----------
 class HasName a where

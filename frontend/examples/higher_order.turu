@@ -1,0 +1,27 @@
+unit testlist
+
+fam Nat = Zero | Succ Nat
+
+fam Int = P Nat | N Nat
+
+let zero = (Zero)
+let one = (Succ Zero)
+
+fam Bool = True | False
+
+fam List = Nil | Cons Any L
+
+rec {
+    let mapList f x =
+        match x [
+            Nil -> Nil,
+            Cons x xs -> Cons (f x) (mapList f xs)
+        ]
+}
+
+let replace x = True
+let ones = Cons one (Cons one (Cons one Nil))
+
+let main = mapList replace ones
+
+

@@ -1,0 +1,3 @@
+unit u
+
+let main x = builtin.addInt 1 2

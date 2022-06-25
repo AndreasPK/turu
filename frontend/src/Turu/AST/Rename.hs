@@ -11,6 +11,7 @@ import GHC.Stack
 import Text.Show.Pretty (ppShow)
 import Turu.AST
 import Turu.AST.Name
+import Turu.Builtins (renameBuiltin)
 import Turu.Prelude as P
 
 type RnM a = State RnState a
@@ -117,17 +118,26 @@ addVar name thing = do
 getFam :: HasCallStack => Name -> RnM (FamDef Var)
 getFam name = do
     fams <- r_fams <$> get
-    return $ HM.lookupDefault (error $ "Key not found" ++ show name) name fams
+    let fam = HM.lookup name fams
+    maybe (nameNotDefined name fams) pure (fam)
 
 getCon :: HasCallStack => Name -> RnM (ConDef Var)
 getCon name = do
     constrs <- r_cons <$> get
-    return $ HM.lookupDefault (error $ "Key not found" ++ show name) name constrs
+    let con = HM.lookup name constrs
+    maybe (nameNotDefined name constrs) pure (con)
 
 getVar :: HasCallStack => Name -> RnM Var
-getVar name = do
-    vars <- r_vars <$> get
-    return $ HM.lookupDefault (error $ "Key not found" ++ show name ++ ppShow vars) name vars
+getVar name
+    | isBuiltinName name = pure $ renameBuiltin name
+    | otherwise = do
+        vars <- r_vars <$> get
+        let var = HM.lookup name vars
+        maybe (nameNotDefined name vars) pure (var)
+
+nameNotDefined :: Show mapping => Name -> mapping -> a
+nameNotDefined name vars =
+    (error $ "Key not found" ++ show name ++ ppShow vars)
 
 --------- Actual rename stuff --------
 

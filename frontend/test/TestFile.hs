@@ -5,18 +5,24 @@ module TestFile where
 
 import Data.List
 import Data.Ord
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import GHC.IO
 import System.FilePath
 import Test.Tasty
 import Test.Tasty.HUnit
 import Text.Megaparsec.Debug (dbg)
 import Text.Show.Pretty hiding (Name)
+
+import Control.Monad
 import Turu.AST
 import Turu.AST.Name
 import Turu.AST.Rename as R
 import Turu.Eval.Reduce as Eval
+import Turu.Eval.Show (showClosure)
 import Turu.Parser as P
 import Turu.Prelude
+import Turu.Pretty
 
 rnExpr1 :: Text -> Expr Var
 rnExpr1 sexpr = runRn $ rnExpr $ fromMaybe (error "ParseError") $ runParser sexpr P.expr
@@ -27,23 +33,17 @@ rnUnit1 s_unit = runRn $ rnUnit $ fromMaybe (error "ParseError") $ runParser s_u
 parseRenameFile :: FilePath -> CompilationUnit Var
 parseRenameFile file = unsafePerformIO $ do
     parsed <- parseFile file
-    putStrLn $ ppShow parsed
+    -- when debugIsOn $ putStrLn $ ppShow parsed
     let renamed = renameUnit <$> parsed
     pure $ fromMaybe (error $ "Failed to parse or rename:" <> file) renamed
 
-checkOutput :: FilePath -> IO Bool
-checkOutput fp = do
-    let src = fp </> ".turu"
-        out = fp </> ".out"
+-- Check if executing file foo.turu matches the output stored in foo.turu.result
+checkOutput :: FilePath -> Assertion
+checkOutput src = do
+    let -- src = fp </> ".turu"
+        out = src <.> ".result"
         unit = parseRenameFile src
-        result = evalMain unit
-    output <- readFile out
-    if output == ppShow result
-        then pure True
-        else do
-            putStrLn $ "Missmatched output for " <> fp
-            putStrLn "Expected:"
-            putStrLn $ ppShow output
-            putStrLn "Actual:"
-            putStrLn $ ppShow result
-            return False
+        result = either id (\r -> (T.pack . render . showClosure False) r <> "\n") $ evalMain unit
+    -- print out
+    output <- T.readFile out
+    assertEqual "checkOutput" output result

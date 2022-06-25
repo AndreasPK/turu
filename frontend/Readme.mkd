@@ -1,0 +1,13 @@
+# Turu - A toy lang written by Andreas and José
+
+## Run a file in the interpreter
+
+To execute a turu file using the interpreter run:
+
+`cabal run exe:frontend -v0 -- examples/list.turu`
+
+It will execute the main function in that file.
+
+## Run tests:
+
+cabal run exe:test-parser
