@@ -19,7 +19,7 @@ import Turu.AST
 import Turu.AST.Name
 import Turu.AST.Utils
 import Turu.Builtins.PrimOps (namePrimOp)
-import Turu.Eval.Builtins (evalBuiltin)
+import Turu.Eval.Builtins (evalBuiltinM)
 import Turu.Eval.Types
 import Turu.Prelude as P
 import Turu.Pretty
@@ -30,14 +30,6 @@ import Turu.Pretty
 
 jose :: a
 jose = error "TODO: Jose"
-
-data EvalState = EvalState
-    { var_heap :: ~(Map Name Closure)
-    , var_cons :: Set Name
-    , var_top :: ~(Map Name Closure)
-    , next_unique :: VUnique
-    -- ^ Sometimes we need to bind a closure to a variable, we use these to make up a name
-    }
 
 addCon :: Name -> EM ()
 addCon name = do
@@ -92,28 +84,12 @@ addTopBindsRec pairs =
     extendClosureEnv (FunClosure code cls_env) upd = FunClosure code $ upd cls_env
     extendClosureEnv Ind{} _ = error "Waht is happening"
 
-{- | a|b|cons 1  \|cons 2 /
-   ^--------------------
--}
-initEvalState :: EvalState
-initEvalState = EvalState mempty mempty mempty 0
-
-newtype EM a = EM (State EvalState a)
-    deriving (Functor, Applicative, Monad, MonadFix)
-
 alt_em :: Monad m => m (Maybe a) -> m (Maybe a) -> m (Maybe a)
 alt_em a b = do
     a' <- a
     if isJust a'
         then return a'
         else b
-
-instance MonadState EvalState (EM) where
-    put s = EM $ put s
-    get = EM $ get
-
-runEM :: EM a -> a
-runEM act = fst $ runState (coerce $ act) (initEvalState)
 
 noData :: Data
 noData = mempty
@@ -252,7 +228,7 @@ type EvalInd = Bool
 
 -- Args already evaluated, same for the function, just run the function with the given arguments.
 applyClosure :: HasCallStack => EvalInd -> Closure -> [Closure] -> EM Closure
-applyClosure _ (Builtin op) args = pure $ evalBuiltin op args
+applyClosure _ (Builtin op) args = evalBuiltinM op args
 applyClosure evalInd c@(Ind v) []
     | evalInd = getVal (v)
     | otherwise = pure c

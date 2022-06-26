@@ -1,0 +1,6 @@
+unit myUnit
+
+let main =
+    let x = builtin.readInt 1
+    in
+    builtin.print x

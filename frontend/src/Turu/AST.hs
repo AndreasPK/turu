@@ -158,13 +158,13 @@ instance (Printable a, Show a) => Printable (Alt a) where
     ppr = ppDoc
 
 data Literal
-    = LString Text
+    = LitString Text
     | LitInt Int
-    | LitChar Char
+    | LitChar Char -- Not used atm
     deriving (Show, Eq)
 
 instance Printable Literal where
-    ppr (LString t) = doubleQuotes $ ppr t
+    ppr (LitString t) = doubleQuotes $ ppr t
     ppr (LitInt n) = ppr n
     ppr (LitChar c) = quotes $ char c
 

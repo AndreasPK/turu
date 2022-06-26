@@ -1,0 +1,3 @@
+unit myUnit
+
+let main = addInt 1 2

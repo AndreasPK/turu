@@ -40,3 +40,24 @@ data Closure
         [Closure]
         -- ^ The arguments to the constructor
     deriving (Eq, Show)
+
+data EvalState = EvalState
+    { var_heap :: ~(Map Name Closure)
+    , var_cons :: Set Name
+    , var_top :: ~(Map Name Closure)
+    , next_unique :: VUnique
+    -- ^ Sometimes we need to bind a closure to a variable, we use these to make up a name
+    }
+
+newtype EM a = EM (State EvalState a)
+    deriving (Functor, Applicative, Monad, MonadFix)
+
+instance MonadState EvalState (EM) where
+    put s = EM $ put s
+    get = EM $ get
+
+runEM :: EM a -> a
+runEM act = fst $ runState (coerce $ act) (initEvalState)
+
+initEvalState :: EvalState
+initEvalState = EvalState mempty mempty mempty 0

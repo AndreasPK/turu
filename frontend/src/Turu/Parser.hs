@@ -331,7 +331,7 @@ lit1 :: P Literal
 lit1 = (slit <|> nlit <|> clit) <* space
 
 slit, nlit, clit :: P Literal
-slit = LString <$> between (char '"') (char '"') (takeWhileP (Just "String") (/= '"'))
+slit = LitString <$> between (char '"') (char '"') (takeWhileP (Just "String") (/= '"'))
 nlit = LitInt <$> number
 clit = LitChar <$> between (char '\'') (char '\'') anySingle
 

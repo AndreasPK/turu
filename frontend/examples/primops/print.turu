@@ -1,0 +1,3 @@
+unit myUnit
+
+let main = builtin.print (builtin.addInt 1 2)

@@ -17,8 +17,8 @@ import Turu.Pretty
 data PrimOp
     = AddInt
     | Print
-    | ReadInt
-    | ReadStr
+    | ReadInt -- Takes a dummy argument
+    | ReadStr -- Takes a dummy argument
     | StrLen
     | HeadStr -- op "abc" = ord a
     | TailStr -- op "abc" = "bc"

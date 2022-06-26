@@ -1,0 +1,6 @@
+unit myUnit
+
+let main =
+    let x = builtin.headStr "abc"
+    in
+    (builtin.consStr x "")
