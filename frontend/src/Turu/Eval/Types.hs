@@ -17,6 +17,7 @@ import Text.Show.Pretty (ppShow)
 import Turu.AST
 import Turu.AST.Name
 import Turu.AST.Utils
+import Turu.Builtins.PrimOps (PrimOp)
 import Turu.Prelude as P
 import Turu.Pretty
 
@@ -27,10 +28,11 @@ type Data = Map Name Closure
 data Closure
     = FunClosure {closure_code :: Code, closure_data :: ~Data}
     | Fun {closure_code :: Code}
+    | -- | Builtins must all either be primops, or inlined during renamed currently
+      Builtin PrimOp
     | Ind Name
     | -- | Objects have no fvs
       Obj Literal
-    | Builtin Name
     | -- | a fully applied constructor
       SatCon
         Var

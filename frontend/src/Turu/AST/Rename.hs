@@ -11,13 +11,17 @@ import GHC.Stack
 import Text.Show.Pretty (ppShow)
 import Turu.AST
 import Turu.AST.Name
-import Turu.Builtins (renameBuiltin)
+import Turu.Builtins (anyFam, anyFamName, anyFamV, renameBuiltin)
 import Turu.Prelude as P
 
 type RnM a = State RnState a
 
 runRn :: RnM a -> a
-runRn act = fst $ runState act (initRnState)
+runRn act =
+    let act' = do
+            addFam anyFamName anyFam
+            act
+     in fst $ runState act' (initRnState)
 
 initRnState :: RnState
 initRnState = RnState 0 mempty mempty mempty
@@ -135,9 +139,9 @@ getVar name
         let var = HM.lookup name vars
         maybe (nameNotDefined name vars) pure (var)
 
-nameNotDefined :: Show mapping => Name -> mapping -> a
+nameNotDefined :: HasCallStack => Show mapping => Name -> mapping -> a
 nameNotDefined name vars =
-    (error $ "Key not found" ++ show name ++ ppShow vars)
+    (error $ "Renamer: Key not found:" ++ show name ++ ppShow vars)
 
 --------- Actual rename stuff --------
 

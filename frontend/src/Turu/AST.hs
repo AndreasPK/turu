@@ -15,6 +15,7 @@ import Data.Text
 import qualified Data.Text as T
 import GHC.TypeLits
 import Text.Show.Pretty hiding (Name)
+import Turu.Builtins.PrimOps (PrimOp)
 
 type Unique (domain :: Symbol) = Int
 type VUnique = Unique "Var"
@@ -91,12 +92,14 @@ data IdInfo
       FamConInfo
         { info_con :: ~DataCon
         }
+    | PrimInfo {info_prim :: PrimOp}
 
 -- deriving (Show)
 
 instance Show IdInfo where
     show _var@VarInfo{} = "VarInfo{}"
     show _var@FamConInfo{} = "FamConInfo{}"
+    show _var@PrimInfo{info_prim} = "PrimInfo(" <> show info_prim <> ")"
 
 -- show var@FamConInfo{} = "FamConInfo{info_con = " <> ppShow (info_con var) <> "}"
 

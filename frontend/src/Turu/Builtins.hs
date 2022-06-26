@@ -1,10 +1,33 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+
 module Turu.Builtins where
 
 import Turu.Prelude
 
+import Control.Applicative
+import Data.Char (toLower)
+import qualified Data.Data as D
 import Data.HashMap.Strict as M
+import qualified Data.Text as T
 import Turu.AST
 import Turu.AST.Name
+import Turu.Builtins.PrimOps
+
+-- Builtin any family
+anyFam :: FamDef Var
+anyFam = FamDef{fd_var = anyFamV, fd_cons = []}
+
+anyFamV :: Var
+anyFamV = MkVar 0 anyFamName anyFamInfo
+
+anyFamName :: Name
+anyFamName = mkBuiltinName "Any"
+
+anyFamInfo :: IdInfo
+anyFamInfo = FamConInfo anyCon
+
+anyCon :: DataCon
+anyCon = FamCon 0 1 (anyFamName) []
 
 builtinUnit :: CompilationUnit Var
 builtinUnit = Unit builtinUnitName fake_binds []
@@ -22,54 +45,21 @@ fake_binds :: [Bind Var]
 fake_binds = fmap mkBuiltinBind builtins
 
 builtins :: [Var]
-builtins = [addIntVar]
+builtins = fmap mkBuiltinVar builtinNames
+
+builtinNames :: [Name]
+builtinNames = primopNames
+
+varPrimOp :: Var -> Maybe PrimOp
+varPrimOp var
+    | PrimInfo op <- v_info $ var =
+        Just op
+    | otherwise = Nothing
 
 ---
 
 mkBuiltinBind :: Var -> Bind Var
 mkBuiltinBind v = Bind v (Var v)
 
-mkBuiltinName :: Text -> Name
-mkBuiltinName n = Name n $ Just builtinUnitName
-
 mkBuiltinVar :: Name -> Var
-mkBuiltinVar name = MkVar 0 name (VarInfo Nothing)
-
-----
-addIntName :: Name
-addIntName = mkBuiltinName "addInt"
-
-addIntVar :: Var
-addIntVar = mkBuiltinVar addIntName
-
--- putChar :: IdInfo
--- putChar =
---     VarInfo
---         { info_unique = 1
---         , info_name = mkBuiltinName "putChar"
---         , info_impl = Nothing
---         }
-
--- putStr :: IdInfo
--- putStr =
---     VarInfo
---         { info_unique = 2
---         , info_name = mkBuiltinName "putStr"
---         , info_impl = Nothing
---         }
-
--- putInt :: IdInfo
--- putInt =
---     VarInfo
---         { info_unique = 3
---         , info_name = mkBuiltinName "putInt"
---         , info_impl = Nothing
---         }
-
--- getInt :: IdInfo
--- getInt =
---     VarInfo
---         { info_unique = 4
---         , info_name = mkBuiltinName "getInt"
---         , info_impl = Nothing
---         }
+mkBuiltinVar name = MkVar 0 name (fromMaybe (VarInfo Nothing) (PrimInfo <$> namePrimOp name))

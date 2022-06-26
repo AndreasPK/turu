@@ -18,6 +18,7 @@ import Text.Show.Pretty (ppShow)
 import Turu.AST
 import Turu.AST.Name
 import Turu.AST.Utils
+import Turu.Builtins.PrimOps (namePrimOp)
 import Turu.Eval.Builtins (evalBuiltin)
 import Turu.Eval.Types
 import Turu.Prelude as P
@@ -70,7 +71,10 @@ addTopBindsRec pairs =
 
         zipWithM_ insertClosure var_in rhs_cls'
   where
-    -- couldn't get the mdo trick to work here so we do something stupid instead:
+    -- couldn't get the mdo trick to work here so we do something "stupid" instead. Which is
+    -- construct the closures using a placeholder and then replacing the placeholder inside
+    -- the closure environment with the actual thing. But there is a risk that these closures
+    -- are lazier than expected as a consequence.
 
     insertClosure :: Var -> Closure -> EM ()
     insertClosure name rhs' = do
@@ -80,6 +84,7 @@ addTopBindsRec pairs =
 
     extendClosureEnv :: Closure -> (Data -> Data) -> Closure
     extendClosureEnv c@Obj{} _ = c
+    extendClosureEnv c@Builtin{} _ = c
     extendClosureEnv c@Fun{} _ = c
     extendClosureEnv c@(SatCon con cls) upd
         | any isInd cls = SatCon con $ fmap (\c1 -> extendClosureEnv c1 upd) cls
@@ -134,8 +139,8 @@ evalMain unit@Unit{unit_binds = binds} =
      in if P.null mains
             then Left "main function not found"
             else
-                let (v_main, main_rhs) = head mains
-                    (arg_bndrs, main_body) = collectLamBinders main_rhs
+                let (_v_main, main_rhs) = head mains
+                    (arg_bndrs, _main_body) = collectLamBinders main_rhs
                     arity = length arg_bndrs
                     eval_expr = App main_rhs $ replicate arity (Lit $ LitInt 0)
                  in Right $ evalWithUnit eval_expr unit
@@ -146,8 +151,8 @@ evalBind bind_str unit@Unit{unit_binds = binds} =
      in if P.null mains
             then Left "function not found"
             else
-                let (v_main, main_rhs) = head mains
-                    (arg_bndrs, main_body) = collectLamBinders main_rhs
+                let (_v_main, main_rhs) = head mains
+                    (arg_bndrs, _main_body) = collectLamBinders main_rhs
                     arity = length arg_bndrs
                     eval_expr = App main_rhs $ replicate arity (Lit $ LitInt 0)
                  in Right $ evalWithUnit eval_expr unit
@@ -163,8 +168,8 @@ evalExpr expr =
 
 ---------------
 
+doInd, doNotInd :: Bool
 doInd = True
-
 doNotInd = False
 
 -- TODO: Closure to expr for testing perhaps?
@@ -187,7 +192,7 @@ stepWithUnit expr (Unit{unit_binds, unit_fams}) = do
 
 getVal :: Name -> EM Closure
 getVal name
-    | isBuiltinName name = pure $ Builtin name
+    | isBuiltinName name = pure $ Builtin $ fromMaybe (error $ "Not a primop:" <> show name) (namePrimOp name)
     | otherwise =
         fromMaybe (error $ show name <> " not in lookup scope")
             <$> (getHeapVal name `alt_em` getTopVal name)
@@ -247,7 +252,7 @@ type EvalInd = Bool
 
 -- Args already evaluated, same for the function, just run the function with the given arguments.
 applyClosure :: HasCallStack => EvalInd -> Closure -> [Closure] -> EM Closure
-applyClosure _ c@(Builtin op) args = pure $ evalBuiltin op args
+applyClosure _ (Builtin op) args = pure $ evalBuiltin op args
 applyClosure evalInd c@(Ind v) []
     | evalInd = getVal (v)
     | otherwise = pure c
@@ -255,8 +260,8 @@ applyClosure evalInd c@(Ind v) args
     | evalInd
     , any isInd args =
         do
-            let evalIndArg (Ind v) = getVal (v)
-                evalIndArg c = pure c
+            let evalIndArg (Ind v') = getVal (v')
+                evalIndArg c' = pure c'
             args' <- mapM evalIndArg args
             c' <- getVal v
             applyClosure evalInd c' args'
@@ -320,7 +325,7 @@ stepApp evalInd n f args = do
     applyClosure evalInd f' args'
 
 evalLet :: EvalInd -> Int -> Bind Var -> Expr Var -> EM Closure
-evalLet ind _ (RecBinds _binds) _ = error "RecBinds not implemented"
+evalLet _ind _ (RecBinds _binds) _ = error "RecBinds not implemented"
 evalLet ind n (Bind v rhs) body = do
     -- Strict language - strict let
     rhs' <- stepExpr ind (n - 1) rhs

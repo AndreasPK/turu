@@ -19,6 +19,9 @@ instance Printable UnitName where
 builtinUnitName :: UnitName
 builtinUnitName = UnitName "builtin"
 
+mkBuiltinName :: Text -> Name
+mkBuiltinName n = Name n $ Just builtinUnitName
+
 data Name = Name
     { n_name :: Text
     , n_unit :: Maybe UnitName

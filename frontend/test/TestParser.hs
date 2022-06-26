@@ -19,6 +19,7 @@ import Turu.Parser as P
 import Turu.Prelude
 
 import TestExamples
+import Turu.Builtins (renameBuiltin)
 import qualified Turu.Builtins as Builtin
 
 main :: IO ()
@@ -86,7 +87,7 @@ unitTests =
                  in runParser "fam Maybe = Just Any | Nothing" P.famDef @?= Just result
             , -- Builtin renaming
               testCase "rename builtin" $
-                let result = Var Builtin.addIntVar
+                let result = Var $ renameBuiltin (mkBuiltinName "addInt")
                  in rnExpr1 "builtin.addInt" @?= result
             ]
         , testGroup
@@ -116,7 +117,7 @@ unitTests =
                 let result = Obj (LitInt 3) :: Closure
                     unit =
                         ( rnUnit1
-                            ( "unit myUnit \n" <> "fam AB = A | B\n" <> "rec { let f = addInt 1 2 }"
+                            ( "unit myUnit \n" <> "fam AB = A | B\n" <> "rec { let f = builtin.addInt 1 2 }"
                             )
                         )
                     expr = Var $ MkVar 0 (mkName "myUnit" "f") simpValInfo

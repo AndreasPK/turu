@@ -20,7 +20,6 @@ import Data.List (intercalate)
 import Turu.AST
 import Turu.AST.Name
 import Turu.AST.Utils
-import Turu.Eval.Reduce
 import Turu.Eval.Types
 import Turu.Prelude as P
 import Turu.Pretty
@@ -41,3 +40,4 @@ showClosure show_env closure =
                 <> if show_env
                     then text $ ppShow dat
                     else mempty
+        Builtin op -> ppr op <> text "#"

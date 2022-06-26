@@ -9,7 +9,7 @@ let one = (Succ Zero)
 
 fam Bool = True | False
 
-fam List = Nil | Cons Any L
+fam List = Nil | Cons builtin.Any List
 
 rec {
     let mapList f x =

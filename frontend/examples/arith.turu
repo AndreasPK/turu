@@ -11,7 +11,7 @@ fam FUnit = Unit
 fam Bool = True | False
 fam Ord = LT | EQ | GT
 
-fam List = Nil | Cons Any L
+fam List = Nil | Cons builtin.Any List
 
 let head x = (match x [ Cons x z -> x])
 let cons x y = (Cons x y)

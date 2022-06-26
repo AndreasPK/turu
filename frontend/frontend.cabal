@@ -31,6 +31,7 @@ executable frontend
         Turu.AST.Utils
         Turu.AST.Name
         Turu.AST.Rename
+        Turu.Bytecode.Types
         Turu.Prelude
         Turu.SymTab
         Turu.Eval.Reduce
@@ -38,6 +39,7 @@ executable frontend
         Turu.Parser
         Turu.Pretty
         Turu.Builtins
+        Turu.Builtins.PrimOps
         Turu.Eval.Builtins
         Turu.Eval.Types
 
@@ -99,6 +101,7 @@ executable test-parser
         Turu.Parser
         Turu.Pretty
         Turu.Builtins
+        Turu.Builtins.PrimOps
         Turu.Eval.Builtins
         Turu.Eval.Types
 
