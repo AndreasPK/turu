@@ -62,6 +62,7 @@ executable frontend
        ,pretty-show
        ,filepath
        ,directory
+       ,cbor
 
     hs-source-dirs: src
     default-language: Haskell2010
@@ -124,3 +125,4 @@ executable test-parser
        ,mtl
        ,filepath
        ,directory
+       ,cbor
