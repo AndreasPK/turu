@@ -1,6 +1,22 @@
+{-# LANGUAGE MagicHash #-}
+
 module Turu.Bytecode.Types where
 
 import Data.Int
+import GHC.Exts
+import Turu.AST
+import Turu.AST.Name
+
+type Offset = Int
+
+data FunRef
+    = FunRefText Name Int -- Identifier of function by name, has to be resolved when loading bytecode
+    | FunRefPtr (FunPtr ()) -- Not stored on disk, ref replace by a ptr
+
+data StackEntry
+    = StackLit Literal Int
+    | StackFun FunRef
+    | FunPos FunRef Offset
 
 data Instruction
     = -- Primops
@@ -18,6 +34,8 @@ data Instruction
     | GetArg -- slot on stack
     | GetLocal -- slot on stack
     | SetLocal -- s:[value,slot] -> locals[slot] = vale, s:[]
+    | GetClosureVar -- index on stack
+    | SetClosureVar -- s:[value,slot]
     | Jump {- s:[target]-}
     | Return
     | -- | Oh oh
@@ -26,3 +44,4 @@ data Instruction
     | CmpInt -- [a,b] -> (a<b:-1, a==b:0, a>b:1)
     | BranchTbl -- TODO
     | BranchEq -- [lbl_otherwise,a,b] a==b: [], a/=b: jmp lbl_otherwise, []
+    |
