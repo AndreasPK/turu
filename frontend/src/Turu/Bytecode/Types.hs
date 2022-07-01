@@ -2,12 +2,45 @@
 
 module Turu.Bytecode.Types where
 
+import Control.Monad.State.Strict
 import Data.Int
 import GHC.Exts
+
+import Data.IntMap (IntMap)
+import Data.Maybe
+import Data.Text (Text)
 import Turu.AST
 import Turu.AST.Name
+import Turu.Prelude
 
+data StackUse
+    = Bounded Int
+    | Unbounded
+
+-- We might chose to embed things like source locations here in the future.
+data VmConstant = VmLiteral Literal
+
+data CompilerState = CompilerState
+    { cs_stackUse :: !StackUse
+    , cs_constants :: IntMap VmConstant
+    }
+
+type CM a = State CompilerState a
 type Offset = Int
+type ConstRef = () -- TODO: This should essentially be a pointer. Not sure how to best model this yet
+
+initCompilerState :: CompilerState
+initCompilerState = CompilerState{cs_stackUse = Bounded 0, cs_constants = mempty}
+
+runCM :: Maybe CompilerState -> CM a -> (a, CompilerState)
+runCM m_state act = runState act (fromMaybe initCompilerState m_state)
+
+state_addConstant :: CompilerState -> VmConstant -> (CompilerState, Int)
+state_addConstant state =
+    let constants = cs_constants
+     in undefined
+
+-------------------------
 
 data FunRef
     = FunRefText Name Int -- Identifier of function by name, has to be resolved when loading bytecode
@@ -17,7 +50,6 @@ data StackEntry
     = StackLit Literal Int
     | StackFun FunRef
     | FunPos FunRef Offset
-
 
 data Instruction
     = -- Primops
