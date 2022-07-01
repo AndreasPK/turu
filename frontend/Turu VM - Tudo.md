@@ -52,3 +52,25 @@ Then during the tail call:
 
 * replace arguments
 
+## Compiling to bytecode
+
+### Expressions
+
+LitVal l
+LitRef str
+
+=> Data: [1: l]
+   Code: Push l -- where does l come from?
+
+   Answer: PushInt instruction
+
+----------------
+
+        let x = Nil
+        in
+
+=>
+
+pushConDesc Nil ["Nil"]
+AllocCon        [ClosureRef]
+

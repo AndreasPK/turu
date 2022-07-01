@@ -18,6 +18,7 @@ data StackEntry
     | StackFun FunRef
     | FunPos FunRef Offset
 
+
 data Instruction
     = -- Primops
       AddInt
@@ -36,6 +37,9 @@ data Instruction
     | SetLocal -- s:[value,slot] -> locals[slot] = vale, s:[]
     | GetClosureVar -- index on stack
     | SetClosureVar -- s:[value,slot]
+    | AllocCon -- [tag,args] -> [heap_ref]
+    | AllocClosure -- [env,code_ptr] -> [heap_ref]
+    | PushInt -- maxBound :: Int24
     | Jump {- s:[target]-}
     | Return
     | -- | Oh oh
@@ -44,4 +48,3 @@ data Instruction
     | CmpInt -- [a,b] -> (a<b:-1, a==b:0, a>b:1)
     | BranchTbl -- TODO
     | BranchEq -- [lbl_otherwise,a,b] a==b: [], a/=b: jmp lbl_otherwise, []
-    |
