@@ -7,8 +7,10 @@ module Turu.Prelude (
     assert,
     module S,
     debugIsOn,
+    concatMapM,
 ) where
 
+import Control.Monad
 import Data.Foldable
 import Data.Maybe
 import Data.Text (Text, pack, unpack)
@@ -22,3 +24,6 @@ assert b msg = if not b then error msg else id
 
 debugIsOn :: Bool
 debugIsOn = False
+
+concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
+concatMapM f xs = liftM concat (mapM f xs)

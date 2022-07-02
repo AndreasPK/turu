@@ -8,8 +8,14 @@ import Turu.Prelude as P
 import Turu.AST
 import Turu.AST.Name
 
-import Data.Set as S
+import Data.Char
+import Data.Set (Set)
+import qualified Data.Set as S
 import Data.String
+import qualified Data.Text as T
+import qualified Data.Text.Lazy as LT
+import qualified Data.Text.Lazy.Builder as LT
+import qualified Data.Text.Lazy.Builder.Int as LT (hexadecimal)
 
 data Box a = Box ~a
 
@@ -38,11 +44,16 @@ instance IsString (Expr Name) where
     fromString s = Var $ Name (fromString s) Nothing
 
 -----------
+{-# INLINE freeVarsExprWithoutStatic #-}
+freeVarsExprWithoutStatic :: (Ord a) => (a -> Bool) -> Expr a -> Set a
+freeVarsExprWithoutStatic is_static expr =
+    S.filter (not . is_static) $ freeVarsExpr expr
+
 freeVarsExpr :: Ord a => Expr a -> Set a
 freeVarsExpr e =
     case e of
         Lit{} -> mempty
-        Var v -> singleton v
+        Var v -> S.singleton v
         App f args -> S.unions (freeVarsExpr f : fmap freeVarsExpr args)
         Lam b rhs -> S.delete b $! freeVarsExpr rhs
         Let b body -> freeVarsBind b <> deletes (freeVarsExpr body) (binderVars b)
@@ -59,3 +70,29 @@ freeVarsBind (RecBinds prs) = deletes (mconcat $ fmap freeVarsExpr $ fmap snd pr
 
 deletes :: Ord i => Set i -> [i] -> Set i
 deletes = P.foldl' (flip S.delete)
+
+mkArgVarInfo :: Name -> IdInfo
+mkArgVarInfo name
+    -- Constructor
+    | isUpper (T.head $ n_name name) =
+        error "Constructor args not supported"
+    | otherwise =
+        VarInfo Nothing
+
+mkArgVar :: Name -> Var
+mkArgVar name =
+    let info = mkArgVarInfo name
+        var = MkVar 0 name info
+     in var
+
+-- Return a value variable that's not free in the given expression
+mkFreeVars :: Int -> VExpr -> [Var]
+mkFreeVars n expr =
+    let fvs = freeVarsExpr expr :: S.Set Var
+        mk_txt = LT.toStrict . LT.toLazyText . LT.hexadecimal
+        names = fmap (mkLocalName . mk_txt) [1 :: Int ..] :: [Name]
+        candidates = fmap mkArgVar names :: [Var]
+     in take n $ filter (\v -> notElem v fvs) candidates
+
+mkFreeVar :: VExpr -> Var
+mkFreeVar = head . mkFreeVars 1

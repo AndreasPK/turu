@@ -32,21 +32,24 @@ type Arity = Int
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 -}
-data Var
-    = -- TODO: GHC has a notion of "internal/local" variables. That might be useful in the future.
+data Var =
+    -- TODO: GHC has a notion of "internal/local" variables. That might be useful in the future.
 
-      -- | something from another unit
-      MkVar
-      { v_unique :: VUnique
+    MkVar
+    { v_unique :: VUnique
     -- ^ Currently not really used - sadface
-      , v_name :: Name
+    , v_name :: Name
     -- ^ Human name for id, we consider vars with the same name to reference the same thing currently.
-      , v_info :: IdInfo
-      }
+    , v_info :: IdInfo
+    }
     deriving (Show)
 
 instance Eq Var where
     (==) v1 v2 = v_name v1 == v_name v2
+
+instance Ord Var where
+    {-# INLINE compare #-}
+    compare v1 v2 = getName v1 `compare` getName v2
 
 -- instance Show Var where
 --     show MkVar { v_unique, v_unit, v_info } =

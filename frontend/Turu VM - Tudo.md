@@ -1,4 +1,23 @@
 
+## Quick facts:
+
+* Stack machine
+* Everything boxed
+* Local variables have slots in the closure
+* Flat closures
+
+## Closure Layout
+
+`[ClosureType | ...]`
+
+`[Function | Arity | Locals + FVs]`
+`[Constr | Arity | Arguments]`
+`[Literal | <payload> ]`
+
+## Turu Bytecode stuff
+
+
+
 ## Stack frame layout:
 
 ```

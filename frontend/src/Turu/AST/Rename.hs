@@ -48,18 +48,18 @@ nextUniqueM = do
     put s'
     return u
 
-mkArgVarInfo :: Name -> VUnique -> RnM IdInfo
-mkArgVarInfo name _u
+mkArgVarRnInfo :: Name -> VUnique -> RnM IdInfo
+mkArgVarRnInfo name _u
     -- Constructor
     | isUpper (T.head $ n_name name) =
         error "Constructor args not supported"
     | otherwise =
         return $ VarInfo Nothing
 
-mkArgVar :: Name -> RnM Var
-mkArgVar name = do
+mkArgVarRn :: Name -> RnM Var
+mkArgVarRn name = do
     u <- nextUniqueM
-    info <- mkArgVarInfo name u
+    info <- mkArgVarRnInfo name u
     let var = MkVar u name info
     return var
 
@@ -238,7 +238,7 @@ rnExpr (App f args) = do
     args' <- mapM rnExpr args
     return $ App f' args'
 rnExpr (Lam b body) = do
-    b' <- mkArgVar b
+    b' <- mkArgVarRn b
     withBinder b' $ do
         Lam b' <$> rnExpr body
 rnExpr (Let bind body) = do
@@ -259,6 +259,6 @@ rnAlt (WildAlt rhs) = WildAlt <$> rnRhs rhs
 rnAlt (LitAlt l rhs) = LitAlt l <$> rnRhs rhs
 rnAlt (ConAlt con_name bndrs rhs) = do
     con_var <- getVar con_name
-    bndrs' <- mapM mkArgVar bndrs
+    bndrs' <- mapM mkArgVarRn bndrs
     rhs' <- withBinders bndrs' $ rnRhs rhs
     return $ ConAlt con_var bndrs' rhs'
