@@ -66,6 +66,9 @@ data Instruction
     | GetClosureVarStack -- index on stack
     | SetClosureVar Int
     | SetClosureVarStack -- s:[value,slot]
+    | -- | s:[heap_ref] -> [f1,f2,f3...] extract the fields of a data constructor onto the stack
+      PushConFields Int -- Number of fields as argument
+    | PushConTag -- s:[heap_ref] -> [tag(boxed)]
     | AllocCon {-the tag-} Int {-number of args-} Int -- [args] -> [heap_ref]
     | -- This way of allocating a function closure is probably highly inefficient
       AllocFun {-arity-} Int {-n_fvs-} Int -- [fv1,fv2,..,fv_n,n_locals,code_ptr] -> [heap_ref]
@@ -111,5 +114,7 @@ instrStackDiff i = case i of
     CmpInt -> -1
     BranchTbl -> todo
     BranchEq -> -3
+    PushConFields n -> n - 1
+    PushConTag -> 0
   where
     todo = error $ "Stack tracking for " <> show i <> " not implemented"

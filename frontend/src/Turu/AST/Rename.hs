@@ -258,7 +258,11 @@ rnAlt :: Alt Name -> RnM (Alt Var)
 rnAlt (WildAlt rhs) = WildAlt <$> rnRhs rhs
 rnAlt (LitAlt l rhs) = LitAlt l <$> rnRhs rhs
 rnAlt (ConAlt con_name bndrs rhs) = do
-    con_var <- getVar con_name
+    con_def <- getCon (c_name con_name)
+    let con_var = cd_var con_def
+        var_info = v_info con_var
+        !con = info_con var_info
+    -- con_var <- getVar con_name
     bndrs' <- mapM mkArgVarRn bndrs
     rhs' <- withBinders bndrs' $ rnRhs rhs
-    return $ ConAlt con_var bndrs' rhs'
+    return $ ConAlt con bndrs' rhs'

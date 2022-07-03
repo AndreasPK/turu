@@ -242,6 +242,9 @@ conNameP :: P Name
 conNameP = do
     name conIdentifier
 
+conUseP :: P DataCon
+conUseP = ParsedCon <$> conNameP
+
 unitDef :: P UnitName
 unitDef = do
     unit_str <- lex (tokens (==) "unit") *> lex identifier
@@ -380,7 +383,7 @@ alt = litAlt <|> conAlt <|> wildAlt
 
 litAlt, conAlt, wildAlt :: AltP
 litAlt = LitAlt <$> (lit1 <* aright) <*> expr1
-conAlt = ConAlt <$> conNameP <*> many valName <*> (aright *> expr1)
+conAlt = ConAlt <$> conUseP <*> many valName <*> (aright *> expr1)
 wildAlt = WildAlt <$> (sym "_" *> aright *> expr1)
 
 -- name :: P Name

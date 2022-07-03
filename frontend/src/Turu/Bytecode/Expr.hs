@@ -70,8 +70,16 @@ cgLet bind body = do
 cgMatch :: VExpr -> [Alt Var] -> CM Instructions
 cgMatch scrut alts = do
     scrut_code <- cgExpr scrut
+    -- TODO: This can be done a *lot* better but we just do linear scan on tags/lits basically.
+    (scrut_code <>) <$> cgAlts alts
 
-    return undefined
+-- Assumes the evaluated scrutinee is on the top of the stack
+cgAlts :: [Alt Var] -> CM Instructions
+cgAlts [] = pure []
+cgAlts ((WildAlt rhs) : _) = cgExpr rhs
+cgAlts ((LitAlt l rhs) : alts) = do
+    undefined
+cgAlts ((ConAlt con bndrs rhs) : alts) = undefined
 
 cgBind :: Bool -> Bind Var -> CM Instructions
 cgBind is_top bind = do

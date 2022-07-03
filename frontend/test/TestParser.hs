@@ -43,6 +43,9 @@ parseRenameFile file = unsafePerformIO $ do
     let renamed = renameUnit <$> parsed
     pure $ fromMaybe (error $ "Failed to parse or rename:" <> file) renamed
 
+pcon :: Name -> DataCon
+pcon = ParsedCon
+
 unitTests :: TestTree
 unitTests =
     testGroup
@@ -53,10 +56,10 @@ unitTests =
                 let result = App "a" ["b"] :: Expr Name
                  in runParser "(a b)" P.expr @?= Just result
             , testCase "match" $
-                let result = Match "s" [ConAlt "Con" ["x", "y"] "x"] :: Expr Name
+                let result = Match "s" [ConAlt (pcon "Con") ["x", "y"] "x"] :: Expr Name
                  in runParser "match s [Con x y -> x]" P.match @?= Just result
             , testCase "match-expr" $
-                let result = Match "s" [ConAlt "Con" ["x", "y"] "x"] :: Expr Name
+                let result = Match "s" [ConAlt (pcon "Con") ["x", "y"] "x"] :: Expr Name
                  in runParser "match s [Con x y -> x]" (P.expr) @?= Just result
             , testCase "bind" $
                 let result = Bind "f" (Lam "x" "x") :: Bind Name

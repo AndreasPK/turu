@@ -1,6 +1,11 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Turu.AST where
 
@@ -125,12 +130,19 @@ data DataCon
         , c_fields :: ~[FamDef Var]
         -- ^ Always empty I guess
         }
+    | ParsedCon
+        {c_name :: Name}
 
+instance Eq DataCon where
+    (==) c1 c2 = c_name c1 == c_name c2
+instance HasName DataCon where
+    getName = c_name
 instance Show DataCon where
     show con = show (c_name con) <> "[" <> sort con <> "," <> ppShow (fmap (v_name . fd_var) $ c_fields con) <> "]"
       where
         sort DataCon{} = "D"
         sort FamCon{} = "F"
+        sort ParsedCon{} = "?C?"
 
 instance Printable (DataCon) where
     ppr = ppDoc
@@ -151,9 +163,15 @@ type VExpr = Expr Var
 instance (Printable a, Show a) => Printable (Expr a) where
     ppr = ppDoc
 
+data BndrType = BName | BVar
+
+type family ConIdentifier a where
+    ConIdentifier Name = Var
+    ConIdentifier a = DataCon
+
 data Alt identifier
     = LitAlt Literal (Expr identifier)
-    | ConAlt identifier [identifier] (Expr identifier)
+    | ConAlt DataCon [identifier] (Expr identifier)
     | WildAlt (Expr identifier) -- `seq`
     deriving (Show, Eq)
 
