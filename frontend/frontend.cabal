@@ -23,6 +23,8 @@ extra-source-files: CHANGELOG.md
 
 executable frontend
     import common-modules
+
+    -- profiling-detail: none
     main-is:          Main.hs
 
     ghc-options: -Wall -Wno-unused-imports
@@ -34,7 +36,7 @@ executable frontend
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
     build-depends:
-        base >=4.15.0.0 && < 4.17
+        base >=4.15.0.0 && <= 4.18
        ,text
        ,megaparsec
        ,parser-combinators
@@ -48,17 +50,23 @@ executable frontend
        ,filepath
        ,directory
        ,cborg
+       ,ghc
+       ,ghc-paths
 
     other-modules:
         Turu.AST
         Turu.AST.Utils
         Turu.AST.Name
         Turu.AST.Rename
+        Turu.Asm.Instr
+        Turu.Asm.CodeGen
         Turu.Bytecode.Types
         Turu.Bytecode.Expr
         Turu.Bytecode.Monad
         Turu.Prelude
         Turu.SymTab
+        Turu.Tc
+        Turu.Tc.Type
         Turu.Eval.Reduce
         Turu.Eval.Show
         Turu.Parser
@@ -101,6 +109,10 @@ executable test-parser
         Turu.AST.Name
         Turu.AST.Utils
         Turu.AST.Rename
+        Turu.Asm.Instr
+        Turu.Asm.CodeGen
+        Turu.Tc
+        Turu.Tc.Type
         Turu.Bytecode.Types
         Turu.Bytecode.Expr
         Turu.Bytecode.Monad
@@ -119,7 +131,7 @@ executable test-parser
         TestExamples
 
     build-depends:
-        base >=4.15.0.0 && < 4.17
+        base >=4.15.0.0 && < 4.18
        ,text
        ,megaparsec
        ,parser-combinators
@@ -135,3 +147,5 @@ executable test-parser
        ,filepath
        ,directory
        ,cborg
+       ,ghc
+       ,ghc-paths
