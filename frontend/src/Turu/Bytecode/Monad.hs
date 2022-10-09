@@ -5,6 +5,7 @@ module Turu.Bytecode.Monad where
 
 import Turu.AST
 import Turu.AST.Name
+import Turu.AST.Var
 import Turu.Bytecode.Types
 import Turu.Prelude
 

@@ -4,6 +4,7 @@ module Turu.SymTab where
 
 import Data.IntMap.Strict
 import Turu.AST
+import Turu.AST.Var
 
 newtype SymbolTable = SymbolTable (IntMap IdInfo)
 

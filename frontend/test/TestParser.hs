@@ -12,7 +12,9 @@ import Text.Megaparsec.Debug (dbg)
 import Text.Show.Pretty hiding (Name)
 import Turu.AST
 import Turu.AST.Name
+import Turu.AST.Var
 import Turu.AST.Rename as R
+import Turu.Tc.Type
 import Turu.Eval.Reduce as Eval
 import Turu.Eval.Types as Eval
 import Turu.Parser as P
@@ -22,14 +24,15 @@ import TestExamples
 import Turu.Builtins (renameBuiltin)
 import qualified Turu.Builtins as Builtin
 
+untypedVar uniq name info = MkVar uniq name info noTy
+
 main :: IO ()
 main = do
     file_tests <- fileTests
     defaultMain $ testGroup "Tests" [unitTests, file_tests]
 
-tests :: TestTree
-tests = testGroup "Tests" [unitTests]
 
+-- Utilities that should probably life elsewhere
 rnExpr1 :: Text -> Expr Var
 rnExpr1 sexpr = runRn $ rnExpr $ fromMaybe (error "ParseError") $ runParser sexpr P.expr
 
@@ -46,6 +49,11 @@ parseRenameFile file = unsafePerformIO $ do
 pcon :: Name -> DataCon
 pcon = ParsedCon
 
+----
+
+tests :: TestTree
+tests = testGroup "Tests" [unitTests]
+
 unitTests :: TestTree
 unitTests =
     testGroup
@@ -53,34 +61,36 @@ unitTests =
         [ testGroup
             "Parse tests"
             [ testCase "application" $
-                let result = App "a" ["b"] :: Expr Name
+                let result = App "a" ["b"] :: Expr NameT
                  in runParser "(a b)" P.expr @?= Just result
             , testCase "match" $
-                let result = Match "s" [ConAlt (pcon "Con") ["x", "y"] "x"] :: Expr Name
+                let result = Match "s" [ConAlt (pcon "Con") ["x", "y"] "x"] :: Expr NameT
                  in runParser "match s [Con x y -> x]" P.match @?= Just result
             , testCase "match-expr" $
-                let result = Match "s" [ConAlt (pcon "Con") ["x", "y"] "x"] :: Expr Name
+                let result = Match "s" [ConAlt (pcon "Con") ["x", "y"] "x"] :: Expr NameT
                  in runParser "match s [Con x y -> x]" (P.expr) @?= Just result
             , testCase "bind" $
-                let result = Bind "f" (Lam "x" "x") :: Bind Name
+                let result = Bind "f" (Lam "x" "x") :: Bind NameT
                  in runParser "let f x = x" P.bind @?= Just result
             , testCase "rec-bind" $
-                let result = RecBinds [("f", (Lam "x" "x"))] :: Bind Name
+                let result = RecBinds [("f", (Lam "x" "x"))] :: Bind NameT
                  in runParser "rec { let f x = x }" (P.bind) @?= Just result
             , testCase "let" $
-                let result = Let (Bind "f" (Lam "x" "x")) (App "f" ["y"]) :: Expr Name
+                let result = Let (Bind "f" (Lam "x" "x")) (App "f" ["y"]) :: Expr NameT
                  in runParser "let f x = x in (f y)" P.expr @?= Just result
             , testCase "lam" $
-                let result = Lam "x" "x" :: Expr Name
+                let result = Lam "x" "x" :: Expr NameT
                  in runParser "(\\x -> x)" P.expr @?= Just result
             , testCase "let2" $
-                let result = Let (Bind "f" (Lam "y" $ Lam "x" "x")) (App "f" ["y"]) :: Expr Name
+                let result = Let (Bind "f" (Lam "y" $ Lam "x" "x")) (App "f" ["y"]) :: Expr NameT
                  in runParser "let f y x = x in (f y)" P.expr @?= Just result
             , testCase "unit1" $
                 let result = Unit "myUnit" [] []
                  in runParser "unit myUnit \n" P.unit @?= Just result
             , testCase "unit2" $
-                let result = Unit "myUnit" [Bind (mkName "myUnit" "f") $ Lam (mkName "myUnit" "x") (Var $ mkName "myUnit" "x")] []
+                let result = Unit "myUnit"
+                                [Bind (mkUntypedName "myUnit" "f") $
+                                    Lam (mkUntypedName "myUnit" "x") (Var $ mkUntypedName "myUnit" "x")] []
                  in runParser "unit myUnit \nlet f x = x" P.unit @?= Just result
             , testCase "conDef" $
                 let result = FamDef "Bool" [ConDef "True" 0 [], ConDef "False" 1 []]
@@ -105,7 +115,7 @@ unitTests =
                             ( "unit myUnit \n" <> "fam AB = A | B\n" <> "let f = let a = A in match a [A ->1, B->2]"
                             )
                         )
-                    expr = Var $ MkVar 0 (mkName "myUnit" "f") simpValInfo
+                    expr = Var $ untypedVar 0 (mkName "myUnit" "f") simpValInfo
                  in (evalWithUnit expr unit) @?= result
             , testCase "lam3" $
                 let result = Obj (LitInt 1) :: Closure
@@ -114,7 +124,7 @@ unitTests =
                             ( "unit myUnit \n" <> "fam AB = A | B\n" <> "rec { let f = let a = A in match a [A ->1, B->2] }"
                             )
                         )
-                    expr = Var $ MkVar 0 (mkName "myUnit" "f") simpValInfo
+                    expr = Var $ untypedVar 0 (mkName "myUnit" "f") simpValInfo
                  in (evalWithUnit expr unit) @?= result
             , testCase "addInt" $
                 let result = Obj (LitInt 3) :: Closure
@@ -123,7 +133,7 @@ unitTests =
                             ( "unit myUnit \n" <> "fam AB = A | B\n" <> "rec { let f = builtin.addInt 1 2 }"
                             )
                         )
-                    expr = Var $ MkVar 0 (mkName "myUnit" "f") simpValInfo
+                    expr = Var $ untypedVar 0 (mkName "myUnit" "f") simpValInfo
                  in (evalWithUnit expr unit) @?= result
                 -- testCase "rec-lam" $
                 --   let parsed_unit = unsafePerformIO $ do

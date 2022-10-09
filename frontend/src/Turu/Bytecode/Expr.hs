@@ -4,6 +4,7 @@ import Turu.Prelude
 
 import Control.Monad.State.Strict
 import Turu.AST
+import Turu.AST.Var
 import Turu.AST.Name
 import Turu.AST.Utils
 import Turu.Bytecode.Monad

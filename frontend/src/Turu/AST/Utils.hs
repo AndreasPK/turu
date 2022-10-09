@@ -7,6 +7,8 @@ import Turu.Prelude as P
 
 import Turu.AST
 import Turu.AST.Name
+import Turu.AST.Var
+import Turu.Tc.Type
 
 import Data.Char
 import Data.Set (Set)
@@ -43,6 +45,11 @@ collectLamBinders e = go [] e
 instance IsString (Expr Name) where
     fromString s = Var $ Name (fromString s) Nothing
 
+instance IsString (Expr NameT) where
+    fromString s = Var $ untypedName $ Name (fromString s) Nothing
+
+
+
 -----------
 {-# INLINE freeVarsExprWithoutStatic #-}
 freeVarsExprWithoutStatic :: (Ord a) => (a -> Bool) -> Expr a -> Set a
@@ -77,12 +84,12 @@ mkArgVarInfo name
     | isUpper (T.head $ n_name name) =
         error "Constructor args not supported"
     | otherwise =
-        VarInfo Nothing
+        VarInfo
 
 mkArgVar :: Name -> Var
 mkArgVar name =
     let info = mkArgVarInfo name
-        var = MkVar 0 name info
+        var = MkVar 0 name info noTy
      in var
 
 -- Return a value variable that's not free in the given expression

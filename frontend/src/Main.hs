@@ -11,6 +11,7 @@ import Control.Monad
 import qualified Data.Text as T
 import Turu.AST
 import Turu.AST.Name
+import Turu.AST.Var
 import Turu.AST.Rename as R
 import Turu.Eval.Reduce as Eval
 import Turu.Eval.Show

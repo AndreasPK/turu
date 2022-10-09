@@ -11,6 +11,8 @@ import Data.HashMap.Strict as M
 import qualified Data.Text as T
 import Turu.AST
 import Turu.AST.Name
+import Turu.AST.Var
+import Turu.Tc.Type
 import Turu.Builtins.PrimOps
 
 -- Builtin any family
@@ -18,7 +20,7 @@ anyFam :: FamDef Var
 anyFam = FamDef{fd_var = anyFamV, fd_cons = []}
 
 anyFamV :: Var
-anyFamV = MkVar 0 anyFamName anyFamInfo
+anyFamV = MkVar 0 anyFamName anyFamInfo noTy
 
 anyFamName :: Name
 anyFamName = mkBuiltinName "Any"
@@ -62,4 +64,4 @@ mkBuiltinBind :: Var -> Bind Var
 mkBuiltinBind v = Bind v (Var v)
 
 mkBuiltinVar :: Name -> Var
-mkBuiltinVar name = MkVar 0 name (fromMaybe (VarInfo Nothing) (PrimInfo <$> namePrimOp name))
+mkBuiltinVar name = MkVar 0 name (fromMaybe (VarInfo) (PrimInfo <$> namePrimOp name)) noTy

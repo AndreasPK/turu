@@ -58,6 +58,7 @@ executable frontend
         Turu.AST.Utils
         Turu.AST.Name
         Turu.AST.Rename
+        Turu.AST.Var
         Turu.Asm.Instr
         Turu.Asm.CodeGen
         Turu.Bytecode.Types
@@ -67,6 +68,9 @@ executable frontend
         Turu.SymTab
         Turu.Tc
         Turu.Tc.Type
+        Turu.Tc.Subst
+        Turu.Tc.Infer
+        Turu.Tc.Builtins
         Turu.Eval.Reduce
         Turu.Eval.Show
         Turu.Parser
@@ -75,6 +79,7 @@ executable frontend
         Turu.Builtins.PrimOps
         Turu.Eval.Builtins
         Turu.Eval.Types
+        Misc
 
     hs-source-dirs: src
     default-language: Haskell2010
@@ -108,6 +113,7 @@ executable test-parser
         Turu.AST
         Turu.AST.Name
         Turu.AST.Utils
+        Turu.AST.Var
         Turu.AST.Rename
         Turu.Asm.Instr
         Turu.Asm.CodeGen
@@ -127,8 +133,11 @@ executable test-parser
         Turu.Eval.Builtins
         Turu.Eval.Types
 
+        Misc
+
         TestFile
         TestExamples
+
 
     build-depends:
         base >=4.15.0.0 && < 4.18

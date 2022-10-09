@@ -12,6 +12,7 @@ import Data.Maybe
 import Data.Text (Text)
 import Turu.AST
 import Turu.AST.Name
+import Turu.AST.Var
 import Turu.Prelude
 
 data StackUse

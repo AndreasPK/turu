@@ -13,6 +13,7 @@ import Text.Show.Pretty (ppShow)
 
 import Turu.AST
 import Turu.AST.Name (HasName (..), Name, isBuiltinName)
+import Turu.AST.Var
 import Turu.AST.Utils
 import Turu.Builtins
 import Turu.Builtins.PrimOps (PrimOp (..))

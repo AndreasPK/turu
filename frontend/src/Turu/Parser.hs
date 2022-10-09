@@ -19,9 +19,13 @@ import Text.Megaparsec.Char as M hiding (space)
 import qualified Text.Megaparsec.Char as M
 import qualified Text.Megaparsec.Char.Lexer as L
 import Text.Megaparsec.Debug as D
+import Misc
+
 import Turu.AST
 import Turu.AST.Name
 import Turu.AST.Utils
+import Turu.AST.Var
+import Turu.Tc.Type
 import Turu.Prelude as P hiding (lex, takeWhile)
 
 {-
@@ -77,6 +81,21 @@ bind = rec many bind1
      | bind1
 
 bind1 = let <name> arg_list '=' expr
+
+tyAnnot = ['<' tyP '>'] -- optional
+tyP  = numTy
+    | funTy
+    | varTy
+
+funTy = tys
+
+tys = tyP -> tys
+    | empty
+
+numTy = number
+varTy = name
+
+tyExpr = expr tyAnnot'<'tyP'>'
 
 -- Maybe try to allow expr1 instead of expr where possible?
 expr = '(' expr1 ')'
@@ -173,7 +192,7 @@ runParser input parser =
             then either (error . show) Just parsed_val
             else traceShow remainder $ either (error . show) Just parsed_val
 
-parseFile :: FilePath -> IO (Maybe (CompilationUnit Name))
+parseFile :: FilePath -> IO (Maybe (CompilationUnit NameT))
 parseFile file = do
     contents <- T.readFile file
     return $ Turu.Parser.runParser contents unit
@@ -189,11 +208,14 @@ lineComment = L.skipLineComment "--"
 blockComment :: P ()
 blockComment = L.skipBlockCommentNested "{-" "-}"
 
+rarrow :: P Text
+rarrow = tokens (==) "->"
+
 -- Consume white space (including newlines)
 space :: P ()
 space = L.space space1 lineComment blockComment
 
--- Consume whitespace after thing
+-- | Consume whitespace after thing
 lex :: P a -> P a
 lex = L.lexeme space
 
@@ -235,15 +257,17 @@ name name_kind =
         )
         <|> Name <$> (name_kind <* space) <*> getUnit
 
-valName :: P Name
-valName = name identifier
+-- | Variable use [with type]
+valName :: P NameT
+valName = pnamety (name identifier) tyAnnot
 
-conNameP :: P Name
+conNameP :: P NameT
 conNameP = do
-    name conIdentifier
+    pnamety (name conIdentifier) tyAnnot
 
+-- Dropes any type annotation
 conUseP :: P DataCon
-conUseP = ParsedCon <$> conNameP
+conUseP = ParsedCon <$> (getName <$> conNameP)
 
 unitDef :: P UnitName
 unitDef = do
@@ -252,13 +276,26 @@ unitDef = do
     setUnit $ Just unit_name
     return unit_name
 
-defs :: P [Either (Bind Name) (FamDef Name)]
+defs :: P [Either (Bind NameT) (FamDef NameT)]
 defs = many def
 
-def :: P (Either (Bind Name) (FamDef Name))
+def :: P (Either (Bind NameT) (FamDef NameT))
 def = (Right <$> try famDef) <|> (Left <$> try bind)
 
-unit :: P (CompilationUnit Name)
+--- Some utility functions to mix it up
+---------------------------------------
+endOfFile :: P ()
+endOfFile = void eof
+
+parens :: P a -> P a
+parens = between pleft pright
+
+pnamety :: P Name -> P (Maybe Ty) -> P NameT
+pnamety l r = pure MkNameT <*> l <*> r
+-- More ast parsing
+-------------------
+
+unit :: P (CompilationUnit NameT)
 unit = do
     n <- unitDef
     (bs, fams) <- partitionEithers <$> defs
@@ -277,7 +314,7 @@ pright = void $ L.symbol space ")"
 aright :: P ()
 aright = void $ sym "->"
 
-famDef :: P (FamDef Name)
+famDef :: P (FamDef NameT)
 famDef = do
     key "fam"
     fam_name <- conNameP
@@ -286,38 +323,77 @@ famDef = do
     return $ FamDef fam_name con_defs
 
 -- True | False | Either
-consList :: Int -> P [ConDef Name]
+consList :: Int -> P [ConDef NameT]
 consList tag = do
     con1 <- try $ consDef tag
     constrs <- try ((sym "|" *> (consList (tag + 1)) <|> pure []))
     return $ con1 : constrs
 
-consDef :: Int -> P (ConDef Name)
+consDef :: Int -> P (ConDef NameT)
 consDef tag = do
     con_name <- conNameP
     con_args <- many conNameP
     return $ ConDef con_name tag con_args
 
-bind :: P (Bind Name)
+bind :: P (Bind NameT)
 bind = rec_bind <|> (uncurry Bind) <$> bind1
 
-rec_bind :: P (Bind Name)
+rec_bind :: P (Bind NameT)
 rec_bind = do
     void $ key "rec" *> sym "{"
     binds <- manyTill bind1 (sym "}")
     return $ RecBinds binds
 
-bind1 :: P (Name, Expr Name)
+bind1 :: P (NameT, Expr NameT)
 bind1 = do
     key "let"
     n <- valName
-    args <- many valName
+    args <- many (valName)
     _ <- sym "="
     -- Not sure if using expr1 here is save
     e <- expr1
     return $ (n, (mkLams args e))
 
-type ExprP = P (Expr Name)
+type ExprP = P (Expr NameT)
+
+-- | x<T> - adds type to the var
+varTySuffix :: Var -> P Var
+varTySuffix v = do
+    annot <- try tyAnnot
+    return $ v { v_ty = annot}
+
+tyAnnot :: P (Maybe Ty)
+tyAnnot = lex (char '<') *> pure Just <*> tyP <* lex(char '>') <|> pure Nothing
+
+tyP :: P (Ty)
+tyP = do
+    lex (varTy <|> try funTy <|> numTy)
+
+tys :: P [Ty]
+tys = do
+    t1 <- (numTy <|> varTy <|> parens tyP) <* space
+    ts <- try $ (lex rarrow *> space *> tys) <|> pure []
+    pure (t1:ts)
+
+numTy :: P Ty
+numTy = do
+    n <- lex number
+    return $ TyArity $ FixedArity n
+
+funTy :: P Ty
+funTy = do
+    arr_tys <- tys
+    (arg_tys,res_ty) <-
+        case snocView arr_tys of
+            Just view -> return view
+            Nothing -> fail "bla"
+
+    return $ FunTy arg_tys res_ty
+
+varTy :: P Ty
+varTy = TyVar <$> lex identifier
+
+
 
 -- expression with or without parens
 expr :: ExprP
@@ -344,7 +420,7 @@ letp :: ExprP
 letp = do
     key "let"
     n <- valName
-    args <- many valName
+    args <- many (valName)
     _ <- sym "="
     rhs <- expr1
     key "in"
@@ -352,11 +428,17 @@ letp = do
     return $ Let (Bind n $ mkLams args rhs) body
 
 lam :: ExprP
-lam = Lam <$> (sym "\\" *> valName) <*> (aright *> expr)
+lam = do
+    _ <- sym "\\"
+    b <- valName
+    body <- (aright *> expr)
+    return $ Lam b body
 
+-- | var expr
 var :: ExprP
 var = Var <$> valName
 
+-- | con expr
 con :: ExprP
 con = Var <$> conNameP
 
@@ -370,13 +452,13 @@ app = do
 match :: ExprP
 match = Match <$> (key "match" *> valName) <*> match_body
 
-match_body :: P [Alt Name]
+match_body :: P [Alt NameT]
 match_body = between (sym "[") (sym "]") alts <* space
 
-alts :: P [Alt Name]
+alts :: P [Alt NameT]
 alts = sepBy1 (alt) (sym ",")
 
-type AltP = P (Alt Name)
+type AltP = P (Alt NameT)
 
 alt :: AltP
 alt = litAlt <|> conAlt <|> wildAlt
@@ -386,8 +468,8 @@ litAlt = LitAlt <$> (lit1 <* aright) <*> expr1
 conAlt = ConAlt <$> conUseP <*> many valName <*> (aright *> expr1)
 wildAlt = WildAlt <$> (sym "_" *> aright *> expr1)
 
--- name :: P Name
+-- name :: P NameT
 -- name = do
 --     c <- lowerChar :: P Char
---     r <- many alphaNumChar :: P Name
+--     r <- many alphaNumChar :: P NameT
 --     return $ c <> r

@@ -17,7 +17,9 @@ import Text.Show.Pretty hiding (Name)
 import Control.Monad
 import Turu.AST
 import Turu.AST.Name
+import Turu.AST.Var
 import Turu.AST.Rename as R
+import Turu.Tc.Type
 import Turu.Eval.Reduce as Eval
 import Turu.Eval.Show (showClosure)
 import Turu.Parser as P

@@ -16,6 +16,7 @@ import GHC.Stack
 import Text.Show.Pretty (ppShow)
 import Turu.AST
 import Turu.AST.Name
+import Turu.AST.Var
 import Turu.AST.Utils
 import Turu.Builtins.PrimOps (PrimOp)
 import Turu.Prelude as P

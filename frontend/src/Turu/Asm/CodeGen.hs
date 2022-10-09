@@ -9,6 +9,8 @@ import qualified Data.Text as T
 
 import Turu.AST
 import Turu.AST.Name
+import Turu.AST.Var
+
 -- import Turu.Asm.Instr
 import GHC.CmmToAsm.X86.Ppr as GHC
 import GHC.Types.Name as GHC

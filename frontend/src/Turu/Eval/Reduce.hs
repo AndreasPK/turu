@@ -17,7 +17,9 @@ import GHC.Stack
 import Text.Show.Pretty (ppShow)
 import Turu.AST
 import Turu.AST.Name
+import Turu.AST.Var
 import Turu.AST.Utils
+import Turu.Tc.Type
 import Turu.Builtins.PrimOps (namePrimOp)
 import Turu.Eval.Builtins (evalBuiltinM)
 import Turu.Eval.Types
@@ -99,7 +101,11 @@ mkTmpVar = do
     s@EvalState{next_unique} <- get
     put s{next_unique = next_unique + 1}
     -- var = !EvalUnit:x_<next_unique>
-    return $ MkVar{v_unique = next_unique, v_name = mkName "!EvalUnit" ("x_" <> T.pack (show next_unique)), v_info = simpValInfo}
+    let name = mkName "!EvalUnit" ("x_" <> T.pack (show next_unique))
+        info = simpValInfo
+        ty = noTy
+
+    return $ MkVar{v_unique = next_unique, v_name = name, v_info = info, v_ty = ty}
 
 isInd :: Closure -> Bool
 isInd Ind{} = True
