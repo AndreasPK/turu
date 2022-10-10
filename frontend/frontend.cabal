@@ -1,4 +1,4 @@
-cabal-version:      3.4
+cabal-version:      3.6
 name:               frontend
 version:            0.1.0.0
 
@@ -22,7 +22,7 @@ maintainer:         klebinger.andreas@gmx.at
 extra-source-files: CHANGELOG.md
 
 executable frontend
-    import common-modules
+    -- import common-modules
 
     -- profiling-detail: none
     main-is:          Main.hs
@@ -119,6 +119,7 @@ executable test-parser
         Turu.Asm.CodeGen
         Turu.Tc
         Turu.Tc.Type
+        Turu.Tc.Infer
         Turu.Bytecode.Types
         Turu.Bytecode.Expr
         Turu.Bytecode.Monad
@@ -135,7 +136,7 @@ executable test-parser
 
         Misc
 
-        Types/Test.hs
+        Types.Test
         TestFile
         TestExamples
 

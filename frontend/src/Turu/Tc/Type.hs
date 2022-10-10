@@ -5,8 +5,10 @@ module Turu.Tc.Type where
 import Turu.Prelude as P
 import Turu.AST.Name
 
+import Control.Monad
 import Data.Map.Strict
 import Data.String
+import Data.Text as T
 
 -- | Mono-arity types
 data Ty = TyArity TyArity | TyVar Text | FunTy [Ty] Ty
@@ -44,3 +46,4 @@ untypedName n = MkNameT n noTy
 
 mkUntypedName :: UnitName -> Text -> NameT
 mkUntypedName x y = uncurry MkNameT (mkName x y, noTy)
+
