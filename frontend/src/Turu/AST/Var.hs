@@ -64,7 +64,7 @@ instance Ord Var where
 --         show v_unique <> ":" <> show v_unit <> ":" <> show v_info
 
 instance Printable Var where
-    ppr MkVar{v_name} = parens (ppr v_name)
+    ppr MkVar{v_name,v_ty} = parens (ppr v_name <> pprMaybe v_ty)
 
 instance HasName Var where
     getName v = v_name v

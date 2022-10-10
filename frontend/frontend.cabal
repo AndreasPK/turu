@@ -135,6 +135,7 @@ executable test-parser
 
         Misc
 
+        Types/Test.hs
         TestFile
         TestExamples
 

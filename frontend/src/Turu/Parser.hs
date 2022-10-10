@@ -388,6 +388,7 @@ funTy = do
             Just view -> return view
             Nothing -> fail "bla"
 
+    when (P.null arg_tys) $ fail "funTy - not enough args"
     return $ FunTy arg_tys res_ty
 
 varTy :: P Ty

@@ -62,9 +62,10 @@ mkArgVarRnInfo name _u
 mkArgVarRn :: NameT -> RnM Var
 mkArgVarRn name_t = do
     let name = getName name_t
+        ty = nameT_ty name_t
     u <- nextUniqueM
     info <- mkArgVarRnInfo name u
-    let var = MkVar u name info noTy
+    let var = MkVar u name info ty
     return var
 
 -- Shadow a binder during the given action

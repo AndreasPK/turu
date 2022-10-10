@@ -31,6 +31,9 @@ instance HasName NameT where
 -- Makes a untyped names only
 instance IsString NameT where
     fromString s = MkNameT (fromString s) Nothing
+
+instance Printable Ty where
+    ppr ty = fromString $ show ty
 -- nameT_ty :: NameT -> Maybe Ty
 -- nameT_ty n = snd n
 noTy :: Maybe Ty

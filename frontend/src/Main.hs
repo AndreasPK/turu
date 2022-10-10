@@ -19,6 +19,9 @@ import Turu.Parser as P
 import Turu.Prelude
 import Turu.Pretty
 
+-- parseText :: Text -> Expr (NameT)
+-- parseText t = fromMaybe (error "ParseError") $ runParser sexpr P.expr
+
 rnExpr1 :: Text -> Expr Var
 rnExpr1 sexpr = runRn $ rnExpr $ fromMaybe (error "ParseError") $ runParser sexpr P.expr
 
