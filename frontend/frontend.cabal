@@ -71,6 +71,7 @@ executable frontend
         Turu.Tc.Subst
         Turu.Tc.Infer
         Turu.Tc.Builtins
+        Turu.Tc.Unify
         Turu.Eval.Reduce
         Turu.Eval.Show
         Turu.Parser

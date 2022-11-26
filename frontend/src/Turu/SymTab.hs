@@ -1,4 +1,4 @@
--- dead module
+-- dead module RIP
 
 module Turu.SymTab where
 

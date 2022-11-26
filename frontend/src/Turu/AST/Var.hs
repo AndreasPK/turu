@@ -48,7 +48,7 @@ data Var =
     , v_name :: Name
     -- ^ Human name for id, we consider vars with the same name to reference the same thing currently.
     , v_info :: IdInfo
-    , v_ty :: Maybe Ty
+    , v_ty :: Maybe Type
     }
     deriving (Show)
 

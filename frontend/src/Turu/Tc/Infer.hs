@@ -26,7 +26,7 @@ type ErrorMsg = Text
 data TcState = TcState
     { tcs_unique :: Int
     , tcs_unit :: ~UnitName
-    , tcs_vars :: HM.HashMap Name PolyTy
+    , tcs_vars :: HM.HashMap Name Type
     , tcs_errors :: [ErrorMsg]
     }
 
@@ -72,38 +72,6 @@ nextUniqueM = do
 mkTcError :: Show a => Text -> a -> TcM ()
 mkTcError msg tys = failTc $ msg <> (T.pack $ show tys)
 
-unionTy :: Ty -> Ty -> TcM Ty
-unionTy !ty1 !ty2
-    -- Types are directly equivalent
-    | ty1 == ty2 = pure ty1
-    | TyArity a1 <- ty1
-    , TyArity a2 <- ty2
-    = case unionArity a1 a2 of
-        Nothing -> mkTcError "Incompatible fixed arity" (ty1,ty2)
-        Just arity -> pure $ TyArity arity
-    | FunTy args1 res1 <- ty1
-    , FunTy args2 res2 <- ty2
-    = let err = mkTcError "Incompatible fun ty" (ty1,ty2)
-          -- Either Monad
-          union_fun_ty = do
-            res <- unionTy res1 res2
-            args <- zipWithM unionTy args1 args2
-            return $ FunTy args res
-      in union_fun_ty
-
-    | otherwise =
-        Left $ "Failed to unify types:" <> T.pack (show (ty1,ty2))
-
-unionArity :: TyArity -> TyArity -> Maybe TyArity
-unionArity a1 a2 =
-    case (a1,a2) of
-        (AnyArity, a2) -> Just a2
-        (a1, AnyArity) -> Just a1
-        (a1, a2)
-            | a1 == a2 -> Just a1
-            | otherwise -> Nothing
-
-------------
 
 -----------------
 

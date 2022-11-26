@@ -28,6 +28,7 @@ import Turu.AST.Var
 import Turu.Tc.Type
 import Turu.Prelude as P hiding (lex, takeWhile)
 
+import qualified Data.List.NonEmpty as NE
 {-
 
 --------------------------
@@ -83,9 +84,10 @@ bind = rec many bind1
 bind1 = let <name> arg_list '=' expr
 
 tyAnnot = ['<' tyP '>'] -- optional
-tyP  = numTy
-    | funTy
-    | varTy
+
+tyP  = numTy    -- x<1>
+    | funTy     -- x<1 -> 2 -> 0 -> 1>
+    | varTy     -- x<n>
 
 funTy = tys
 
@@ -290,7 +292,7 @@ endOfFile = void eof
 parens :: P a -> P a
 parens = between pleft pright
 
-pnamety :: P Name -> P (Maybe Ty) -> P NameT
+pnamety :: P Name -> P (Maybe Type) -> P NameT
 pnamety l r = pure MkNameT <*> l <*> r
 -- More ast parsing
 -------------------
@@ -357,42 +359,47 @@ bind1 = do
 type ExprP = P (Expr NameT)
 
 -- | x<T> - adds type to the var
-varTySuffix :: Var -> P Var
-varTySuffix v = do
+varTypeSuffix :: Var -> P Var
+varTypeSuffix v = do
     annot <- try tyAnnot
     return $ v { v_ty = annot}
 
-tyAnnot :: P (Maybe Ty)
+tyAnnot :: P (Maybe Type)
 tyAnnot = lex (char '<') *> pure Just <*> tyP <* lex(char '>') <|> pure Nothing
 
-tyP :: P (Ty)
+-- The type inside the <> brackets
+tyP :: P (Type)
 tyP = do
-    lex (varTy <|> try funTy <|> numTy)
+    lex (varType <|> try funType <|> (numType))
 
-tys :: P [Ty]
+tys :: P [Type]
 tys = do
-    t1 <- (numTy <|> varTy <|> parens tyP) <* space
+    t1 <- (numType <|> varType <|> parens tyP) <* space
     ts <- try $ (lex rarrow *> space *> tys) <|> pure []
     pure (t1:ts)
 
-numTy :: P Ty
-numTy = do
+numType :: P Type
+numType = do
     n <- lex number
-    return $ TyArity $ FixedArity n
+    pure $! assert (n >= 0) "numType >= 0" True
+    return $ mkArityOnlyTy n
 
-funTy :: P Ty
-funTy = do
+funType :: P Type
+funType = do
     arr_tys <- tys
     (arg_tys,res_ty) <-
         case snocView arr_tys of
             Just view -> return view
             Nothing -> fail "bla"
 
-    when (P.null arg_tys) $ fail "funTy - not enough args"
-    return $ FunTy arg_tys res_ty
+    when (P.null arg_tys) $ fail "funType - not enough args"
+    let arity = P.length arg_tys
+    return $ mkFunTy arity (Just arg_tys) res_ty
 
-varTy :: P Ty
-varTy = TyVar <$> lex identifier
+varType :: P Type
+varType = do
+    v_name <- name identifier
+    return $ TyVar v_name
 
 
 
