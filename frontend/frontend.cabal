@@ -27,7 +27,7 @@ executable frontend
     -- profiling-detail: none
     main-is:          Main.hs
 
-    ghc-options: -Wall -Wno-unused-imports
+    ghc-options: -Wall -Wno-unused-imports -Wno-x-partial
 
 
     -- Modules included in this executable, other than Main.
@@ -36,7 +36,7 @@ executable frontend
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
     build-depends:
-        base >=4.15.0.0 && <= 4.18
+        base >=4.15.0.0 && <= 4.22
        ,text
        ,megaparsec
        ,parser-combinators
@@ -99,6 +99,8 @@ executable test-parser
     hs-source-dirs: src, test
     main-is: TestParser.hs
 
+    ghc-options: -Wno-x-partial
+
     default-extensions:
         GADTs,
         OverloadedStrings,
@@ -143,7 +145,7 @@ executable test-parser
 
 
     build-depends:
-        base >=4.15.0.0 && < 4.18
+        base >=4.15.0.0 && < 4.22
        ,text
        ,megaparsec
        ,parser-combinators
@@ -154,10 +156,11 @@ executable test-parser
        ,tasty
        ,tasty-hunit
        ,pretty
-       ,pretty-show
+       , pretty-sop
+       ,pretty-show >= 1.10
        ,mtl
        ,filepath
        ,directory
        ,cborg
-       ,ghc
+       ,ghc >= 9.6.7
        ,ghc-paths

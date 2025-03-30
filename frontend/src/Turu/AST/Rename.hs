@@ -34,16 +34,16 @@ renameUnit unit = runRn $ rnUnit unit
 ------------
 
 data RnState = RnState
-    { r_unique :: Int
+    { r_unique :: UniqueType
     , r_fams :: HM.HashMap Name (FamDef Var)
     , r_cons :: HM.HashMap Name (ConDef Var)
     , r_vars :: HM.HashMap Name Var
     }
 
-nextUnique :: RnState -> (Int, RnState)
+nextUnique :: RnState -> (UniqueType, RnState)
 nextUnique s@RnState{r_unique = u} = (u, s{r_unique = u + 1})
 
-nextUniqueM :: RnM Int
+nextUniqueM :: RnM UniqueType
 nextUniqueM = do
     s <- get
     let (u, s') = nextUnique s

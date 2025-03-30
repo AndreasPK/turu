@@ -17,6 +17,7 @@ import Turu.Pretty
 import Data.Hashable
 import Data.String
 import Data.Text
+import Data.Word
 import qualified Data.Text as T
 import GHC.TypeLits
 
@@ -24,7 +25,9 @@ import Text.Show.Pretty hiding (Name)
 import Turu.Builtins.PrimOps (PrimOp)
 import Turu.Tc.Type
 
-type Unique (domain :: Symbol) = Int
+type UniqueType = Word64
+
+type Unique (domain :: Symbol) = UniqueType
 type VUnique = Unique "Var"
 type CUnique = Unique "Con"
 

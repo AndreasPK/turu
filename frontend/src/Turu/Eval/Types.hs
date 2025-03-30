@@ -21,6 +21,7 @@ import Turu.AST.Utils
 import Turu.Builtins.PrimOps (PrimOp)
 import Turu.Prelude as P
 import Turu.Pretty
+import Control.Monad.Fix
 
 type Code = Expr Var
 

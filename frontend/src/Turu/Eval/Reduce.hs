@@ -5,6 +5,7 @@ module Turu.Eval.Reduce where
 
 import Control.Applicative
 import Control.Monad.State.Strict
+import Control.Monad
 import qualified Control.Monad.Trans.State.Strict as TS
 import Data.Bits (Bits (xor))
 import Data.Char
